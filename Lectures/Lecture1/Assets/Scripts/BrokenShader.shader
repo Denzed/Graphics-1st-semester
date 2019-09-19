@@ -34,7 +34,8 @@
             v2f vert (appdata_base v)
             {
                 v2f o;
-                o.pos = UnityObjectToClipPos(v.vertex);
+                o.pos.xyz = v.vertex.xyz;
+                o.pos = UnityObjectToClipPos(o.pos);
                 o.uv = v.texcoord;
                 o.normal = UnityObjectToWorldNormal(v.normal);
                 return o;
@@ -44,12 +45,12 @@
 
             fixed4 frag (v2f i) : SV_Target
             {
-                half nl = max(0, dot(i.normal, _WorldSpaceLightPos0.xyz));
+                half nl = max(0.0, dot(i.normal, _WorldSpaceLightPos0.xyz));
                 half3 light = nl * _LightColor0;
                 light += ShadeSH9(half4(i.normal,1));
                 
                 fixed4 col = tex2D(_MainTex, i.uv);
-                col.rgb *= light;
+                col.rgb *= light * i.normal;
                 return col;
             }
             ENDCG
