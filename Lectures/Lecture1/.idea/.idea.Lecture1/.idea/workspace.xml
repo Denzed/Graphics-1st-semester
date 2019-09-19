@@ -2,17 +2,11 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="7eac7ee9-613b-4ad1-b08a-42ce86a9c5af" name="Default Changelist" comment="">
-      <change afterPath="$PROJECT_DIR$/Assets/Scripts/UI/Elements/InputFieldSlider.cs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/Assets/Scripts/UI/Elements/InputFieldSlider.cs.meta" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/Assets/Scripts/UI/Projections.meta" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/Assets/Scripts/UI/Projections/ArrayOfPoints2D.cs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/Assets/Scripts/UI/Projections/ArrayOfPoints2D.cs.meta" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/Assets/Scripts/UI/Projections/Line2D.cs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/Assets/Scripts/UI/Projections/Line2D.cs.meta" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/Assets/Scripts/UI/Projections/Point2D.cs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/Assets/Scripts/UI/Projections/Point2D.cs.meta" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/Assets/Scripts/UI/Projections/TransformMatrix2DView.cs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/Assets/Scripts/UI/Projections/TransformMatrix2DView.cs.meta" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../Lecture2/Assets/Scripts/MeshGenerator.cs" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../Lecture2/Assets/Scripts/MeshGenerator.cs.meta" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/.idea.Lecture1/.idea/indexLayout.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/.idea.Lecture1/.idea/indexLayout.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/.idea.Lecture1/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/.idea.Lecture1/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/ProjectSettings/ProjectSettings.asset" beforeDir="false" afterPath="$PROJECT_DIR$/ProjectSettings/ProjectSettings.asset" afterDir="false" />
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
     <option name="SHOW_DIALOG" value="false" />
@@ -25,15 +19,15 @@
       <file pinned="false" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/Assets/Scripts/BrokenShader.shader">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="370">
-              <caret line="47" column="30" lean-forward="true" selection-start-line="47" selection-start-column="30" selection-end-line="47" selection-end-column="30" />
+            <state relative-caret-position="340">
+              <caret line="45" column="13" selection-start-line="45" selection-start-column="13" selection-end-line="45" selection-end-column="13" />
               <folding>
-                <marker date="1568270679215" expanded="true" signature="29:1809" ph="{...}" />
-                <marker date="1568270679215" expanded="true" signature="50:254" ph="{...}" />
-                <marker date="1568270679215" expanded="true" signature="273:1784" ph="{...}" />
-                <marker date="1568270679215" expanded="true" signature="296:1778" ph="{...}" />
-                <marker date="1568270679215" expanded="true" signature="310:552" ph="/* indicate that our pass is the &quot;base&quot; pass in forward ... */" />
-                <marker date="1568270679215" expanded="true" signature="628:1763" ph="{...}" />
+                <marker date="1568310847347" expanded="true" signature="29:1809" ph="{...}" />
+                <marker date="1568310847347" expanded="true" signature="50:254" ph="{...}" />
+                <marker date="1568310847347" expanded="true" signature="273:1784" ph="{...}" />
+                <marker date="1568310847347" expanded="true" signature="296:1778" ph="{...}" />
+                <marker date="1568310847347" expanded="true" signature="310:552" ph="/* indicate that our pass is the &quot;base&quot; pass in forward ... */" />
+                <marker date="1568310847347" expanded="true" signature="628:1763" ph="{...}" />
               </folding>
             </state>
           </provider>
@@ -337,7 +331,7 @@
     <servers />
   </component>
   <component name="TimeTrackingManager">
-    <option name="totallyTimeSpent" value="20004000" />
+    <option name="totallyTimeSpent" value="20612000" />
   </component>
   <component name="TodoView">
     <todo-panel id="selected-file">
@@ -418,13 +412,7 @@
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/Assets/Scripts/UI/Projections/TransformMatrix2D.cs">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="75">
-          <caret line="5" column="5" selection-start-line="5" selection-start-column="5" selection-end-line="5" selection-end-column="5" />
-        </state>
-      </provider>
-    </entry>
+    <entry file="file://$PROJECT_DIR$/Assets/Scripts/UI/Projections/TransformMatrix2D.cs" />
     <entry file="file://$APPLICATION_CONFIG_DIR$/resharper-host/DecompilerCache/decompiler/992E9B05-7D71-437E-9C52-3C29334F4520/80/ff3e7add/EditorBuildSettings.cs">
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="375">
@@ -432,34 +420,10 @@
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/Assets/Plugins/Presentation-master/Scripts/SlideDeck.cs">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="207">
-          <caret line="166" column="41" lean-forward="true" selection-start-line="166" selection-start-column="41" selection-end-line="166" selection-end-column="41" />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/Assets/Plugins/Presentation-master/Editor/Inspectors/SlideDeckEditor.cs">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="712">
-          <caret line="185" column="39" selection-start-line="185" selection-start-column="39" selection-end-line="185" selection-end-column="39" />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/Assets/Plugins/Presentation-master/Scripts/Behaviours/PresentationHelper.cs">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="90">
-          <caret line="12" column="30" selection-start-line="12" selection-start-column="30" selection-end-line="12" selection-end-column="30" />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/Assets/Plugins/Presentation-master/Scripts/Behaviours/Empty.cs">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="300">
-          <caret line="20" column="25" selection-start-line="20" selection-start-column="25" selection-end-line="20" selection-end-column="25" />
-        </state>
-      </provider>
-    </entry>
+    <entry file="file://$PROJECT_DIR$/Assets/Plugins/Presentation-master/Scripts/SlideDeck.cs" />
+    <entry file="file://$PROJECT_DIR$/Assets/Plugins/Presentation-master/Editor/Inspectors/SlideDeckEditor.cs" />
+    <entry file="file://$PROJECT_DIR$/Assets/Plugins/Presentation-master/Scripts/Behaviours/PresentationHelper.cs" />
+    <entry file="file://$PROJECT_DIR$/Assets/Plugins/Presentation-master/Scripts/Behaviours/Empty.cs" />
     <entry file="file://$APPLICATION_CONFIG_DIR$/resharper-host/DecompilerCache/decompiler/2CE23092-8A98-496B-A12C-A183760FB5F6/17/ac42bb55/UnityEvent.cs">
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="178">
@@ -495,13 +459,7 @@
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/Assets/Plugins/Vectrosity/What to import!.txt">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="30">
-          <caret line="2" column="56" selection-start-line="2" selection-start-column="56" selection-end-line="2" selection-end-column="56" />
-        </state>
-      </provider>
-    </entry>
+    <entry file="file://$PROJECT_DIR$/Assets/Plugins/Vectrosity/What to import!.txt" />
     <entry file="file://$PROJECT_DIR$/Assets/Scripts/UI/Projections/ArrayOfPoints2D.cs">
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="275">
@@ -523,13 +481,7 @@
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/Assets/Scripts/UI/Projections/LineSelector.cs">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="60">
-          <caret line="4" column="8" selection-start-line="4" selection-start-column="8" selection-end-line="4" selection-end-column="8" />
-        </state>
-      </provider>
-    </entry>
+    <entry file="file://$PROJECT_DIR$/Assets/Scripts/UI/Projections/LineSelector.cs" />
     <entry file="file://$PROJECT_DIR$/Assets/Scripts/UI/Projections/Line2D.cs">
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="245">
@@ -591,31 +543,19 @@
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/Assets/Plugins/Presentation-master/Scripts/Engine.cs">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="407">
-          <caret line="269" column="6" selection-start-line="269" selection-start-column="6" selection-end-line="269" selection-end-column="6" />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/Assets/Scripts/UI/Elements/SlideId.cs">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="270">
-          <caret line="18" column="40" selection-start-line="18" selection-start-column="40" selection-end-line="18" selection-end-column="40" />
-        </state>
-      </provider>
-    </entry>
+    <entry file="file://$PROJECT_DIR$/Assets/Plugins/Presentation-master/Scripts/Engine.cs" />
+    <entry file="file://$PROJECT_DIR$/Assets/Scripts/UI/Elements/SlideId.cs" />
     <entry file="file://$PROJECT_DIR$/Assets/Scripts/BrokenShader.shader">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="370">
-          <caret line="47" column="30" lean-forward="true" selection-start-line="47" selection-start-column="30" selection-end-line="47" selection-end-column="30" />
+        <state relative-caret-position="340">
+          <caret line="45" column="13" selection-start-line="45" selection-start-column="13" selection-end-line="45" selection-end-column="13" />
           <folding>
-            <marker date="1568270679215" expanded="true" signature="29:1809" ph="{...}" />
-            <marker date="1568270679215" expanded="true" signature="50:254" ph="{...}" />
-            <marker date="1568270679215" expanded="true" signature="273:1784" ph="{...}" />
-            <marker date="1568270679215" expanded="true" signature="296:1778" ph="{...}" />
-            <marker date="1568270679215" expanded="true" signature="310:552" ph="/* indicate that our pass is the &quot;base&quot; pass in forward ... */" />
-            <marker date="1568270679215" expanded="true" signature="628:1763" ph="{...}" />
+            <marker date="1568310847347" expanded="true" signature="29:1809" ph="{...}" />
+            <marker date="1568310847347" expanded="true" signature="50:254" ph="{...}" />
+            <marker date="1568310847347" expanded="true" signature="273:1784" ph="{...}" />
+            <marker date="1568310847347" expanded="true" signature="296:1778" ph="{...}" />
+            <marker date="1568310847347" expanded="true" signature="310:552" ph="/* indicate that our pass is the &quot;base&quot; pass in forward ... */" />
+            <marker date="1568310847347" expanded="true" signature="628:1763" ph="{...}" />
           </folding>
         </state>
       </provider>
