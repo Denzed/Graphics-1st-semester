@@ -1,0 +1,97 @@
+﻿// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel marchCubes
+
+#include "UnityShaderVariables.cginc"  // for time
+#include "Noise.cginc"                 // Hiding creepy copy-paste
+
+const uint3 SPLIT_FACTOR;
+
+// Cube
+StructuredBuffer<float3> cubeVertices;
+
+// Marching
+StructuredBuffer<uint> caseToTrianglesCount;
+StructuredBuffer<int3> caseToEdges;
+
+struct Triangle {
+    float3 a, b, c;
+    float3 na, nb, nc;
+};
+
+// Output triangles
+AppendStructuredBuffer<Triangle> outTriangles;
+
+float f(float3 p) {   // implicit surface definition
+    return snoise(p + _SinTime.xyz);
+}
+
+float3 getPositionOfZeroF(float3 a, float3 b) {
+    float t = abs(f(a)) / (abs(f(a)) + abs(f(b)));
+
+    return a + t * (b - a);
+}
+
+const static float3 DELTA = float3(1e-3, 1e-3, 1e-3);
+const static float3 DELTA_X = float3(1, 0, 0) * DELTA;
+const static float3 DELTA_Y = float3(0, 1, 0) * DELTA;
+const static float3 DELTA_Z = float3(0, 0, 1) * DELTA;
+
+float3 getNormal(float3 a) {
+    return normalize(float3(
+        f(a + DELTA_X) - f(a - DELTA_X),
+        f(a + DELTA_Y) - f(a - DELTA_Y),
+        f(a + DELTA_Z) - f(a - DELTA_Z)
+    ));
+}
+
+[numthreads(8, 8, 8)]
+void marchCubes (uint3 id : SV_DispatchThreadID)
+{
+    float3 INV_SPLIT_FACTOR = 1.0 / SPLIT_FACTOR;
+    
+    uint cubeCase = 0;
+    for (uint v = 0; v < 8; v++) {
+        float3 vertex = (id + cubeVertices[v]) * INV_SPLIT_FACTOR;
+        if (f(vertex) > 0) {
+            cubeCase |= 1 << v;
+        }
+    }
+
+    uint caseTriangles = caseToTrianglesCount[cubeCase];
+    for (uint t = 0; t < caseTriangles; t++) {
+        int3 triangleEdges = caseToEdges[cubeCase * 5 + t];
+
+        float3 outTriangle[3];
+
+        uint i, j;
+
+        for (uint e = 0; e < 3; e++) {
+            uint edge = triangleEdges[e];
+            if (edge < 4) {                                 
+                i = edge;                                   
+                j = (i + 1) % 4u;                           
+            } else if (edge < 8) {                          
+                i = edge;                                   
+                j = 4 + (edge - 3) % 4u;                    
+            } else {                                        
+                i = edge % 4u;                              
+                j = i + 4;                                  
+            }                                               
+                                                            
+            outTriangle[e] = getPositionOfZeroF(            
+                (id + cubeVertices[i]) * INV_SPLIT_FACTOR,  
+                (id + cubeVertices[j]) * INV_SPLIT_FACTOR   
+            );
+        }
+
+        Triangle tr;
+        tr.a = outTriangle[0];
+        tr.na = getNormal(tr.a);
+        tr.b = outTriangle[1];
+        tr.nb = getNormal(tr.b);
+        tr.c = outTriangle[2];
+        tr.nc = getNormal(tr.c);
+
+        outTriangles.Append(tr);
+    }
+}
