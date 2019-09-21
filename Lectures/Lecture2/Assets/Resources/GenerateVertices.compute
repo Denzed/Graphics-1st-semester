@@ -4,6 +4,8 @@
 #include "UnityShaderVariables.cginc"  // for time
 #include "Noise.cginc"                 // Hiding creepy copy-paste
 
+const static float SQRT3 = sqrt(3.0);
+
 const uint3 SPLIT_FACTOR;
 
 // Cube
@@ -22,7 +24,8 @@ struct Triangle {
 AppendStructuredBuffer<Triangle> outTriangles;
 
 float f(float3 p) {   // implicit surface definition
-    return snoise(p + _SinTime.xyz);
+    float q = (1.0 - length(p)) / SQRT3 * 2.0;
+    return snoise(p + _SinTime.xyz) * q;
 }
 
 float3 getPositionOfZeroF(float3 a, float3 b) {
@@ -44,7 +47,7 @@ float3 getNormal(float3 a) {
     ));
 }
 
-[numthreads(8, 8, 8)]
+[numthreads(4, 4, 4)]
 void marchCubes (uint3 id : SV_DispatchThreadID)
 {
     float3 INV_SPLIT_FACTOR = 1.0 / SPLIT_FACTOR;

@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -92,19 +93,10 @@ public class MeshGenerator : MonoBehaviour {
         Triangle[] outTriangles = new Triangle[outVertices.count];
         outVertices.GetData(outTriangles);
 
-        List<Vector3> vertices = new List<Vector3>();
-        List<Vector3> normals = new List<Vector3>();
-        List<int> triangles = new List<int>();
-        for (int i = 0; i < outVertices.count; i++) {
-            triangles.AddRange(new List<int> { 3 * i, 3 * i + 1, 3 * i + 2 });
-            vertices.AddRange(new List<Vector3> { outTriangles[i].a, outTriangles[i].b, outTriangles[i].c });
-            normals.AddRange(new List<Vector3> { outTriangles[i].na, outTriangles[i].nb, outTriangles[i].nc });
-        }
-
         _mesh.Clear(false);
-        _mesh.SetVertices(vertices);
-        _mesh.SetTriangles(triangles, 0);
-        _mesh.SetNormals(normals);
+        _mesh.SetVertices(outTriangles.SelectMany(tr => new [] { tr.a, tr.b, tr.c }).ToList());
+        _mesh.SetTriangles(Enumerable.Range(0, 3 * outVertices.count).ToList(), 0);
+        _mesh.SetNormals(outTriangles.SelectMany(tr => new [] { tr.na, tr.nb, tr.nc }).ToList());
 
         // Upload mesh data to the GPU
         _mesh.UploadMeshData(false);
