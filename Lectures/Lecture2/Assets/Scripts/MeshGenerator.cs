@@ -90,13 +90,25 @@ public class MeshGenerator : MonoBehaviour {
         );
 
         // Here unity automatically assumes that vertices are points and hence will be represented as (x, y, z, 1) in homogenous coordinates
-        Triangle[] outTriangles = new Triangle[outVertices.count];
+        int nTriangles = outVertices.count;
+        Triangle[] outTriangles = new Triangle[nTriangles];
         outVertices.GetData(outTriangles);
 
+        Vector3[] vertices = new Vector3[3 * nTriangles];
+        Vector3[]  normals = new Vector3[3 * nTriangles];
+        for (int i = 0; i < nTriangles; i++) {
+            vertices[3 * i    ] = outTriangles[i].a;
+            vertices[3 * i + 1] = outTriangles[i].b;
+            vertices[3 * i + 2] = outTriangles[i].c;
+            normals [3 * i    ] = outTriangles[i].na;
+            normals [3 * i + 1] = outTriangles[i].nb;
+            normals [3 * i + 2] = outTriangles[i].nc;
+        }
+
         _mesh.Clear(false);
-        _mesh.SetVertices(outTriangles.SelectMany(tr => new [] { tr.a, tr.b, tr.c }).ToList());
-        _mesh.SetTriangles(Enumerable.Range(0, 3 * outVertices.count).ToList(), 0);
-        _mesh.SetNormals(outTriangles.SelectMany(tr => new [] { tr.na, tr.nb, tr.nc }).ToList());
+        _mesh.vertices = vertices;
+        _mesh.triangles = Enumerable.Range(0, 3 * nTriangles).ToArray();
+        _mesh.normals = normals;
 
         // Upload mesh data to the GPU
         _mesh.UploadMeshData(false);

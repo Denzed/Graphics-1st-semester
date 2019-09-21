@@ -4,9 +4,12 @@
 #include "UnityShaderVariables.cginc"  // for time
 #include "Noise.cginc"                 // Hiding creepy copy-paste
 
-const static float SQRT3 = sqrt(3.0);
-
 const uint3 SPLIT_FACTOR;
+
+const static float3 DELTA = float3(1e-3, 1e-3, 1e-3);
+const static float3 DELTA_X = float3(1, 0, 0) * DELTA;
+const static float3 DELTA_Y = float3(0, 1, 0) * DELTA;
+const static float3 DELTA_Z = float3(0, 0, 1) * DELTA;
 
 // Cube
 StructuredBuffer<float3> cubeVertices;
@@ -24,7 +27,11 @@ struct Triangle {
 AppendStructuredBuffer<Triangle> outTriangles;
 
 float f(float3 p) {   // implicit surface definition
-    float q = (1.0 - length(p)) / SQRT3 * 2.0;
+    float3 d = abs(p - 0.5);
+    float dMax = max(max(d.x, d.y), d.z);
+
+    float q = 1.0 - pow(dMax * 2.0, 1.0);
+    
     return snoise(p + _SinTime.xyz) * q;
 }
 
@@ -33,11 +40,6 @@ float3 getPositionOfZeroF(float3 a, float3 b) {
 
     return a + t * (b - a);
 }
-
-const static float3 DELTA = float3(1e-3, 1e-3, 1e-3);
-const static float3 DELTA_X = float3(1, 0, 0) * DELTA;
-const static float3 DELTA_Y = float3(0, 1, 0) * DELTA;
-const static float3 DELTA_Z = float3(0, 0, 1) * DELTA;
 
 float3 getNormal(float3 a) {
     return normalize(float3(
