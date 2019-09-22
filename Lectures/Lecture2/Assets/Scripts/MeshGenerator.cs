@@ -10,7 +10,7 @@ public class MeshGenerator : MonoBehaviour {
         public Vector3 na, nb, nc;
     };
 
-    private const int FACTOR = 16;
+    private const int FACTOR = 128;
 
     private Mesh _mesh;
     private MeshFilter _filter;
@@ -21,6 +21,9 @@ public class MeshGenerator : MonoBehaviour {
 
     private ComputeBuffer _caseToTrianglesCount;
     private ComputeBuffer _caseToEdges;
+
+    private ComputeBuffer _outTriangles;
+    private ComputeBuffer _outTrianglesCount;
     
     /// <summary>
     /// Executed by Unity upon object initialization. <see cref="https://docs.unity3d.com/Manual/ExecutionOrder.html"/>
@@ -29,6 +32,7 @@ public class MeshGenerator : MonoBehaviour {
         _filter = GetComponent<MeshFilter>();
         _mesh = _filter.mesh = new Mesh();
         _mesh.MarkDynamic();
+        _mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
 
         List<Vector3> sourceVertices = new List<Vector3> {
             new Vector3(0, 0, 0), // 0
@@ -66,22 +70,25 @@ public class MeshGenerator : MonoBehaviour {
 
         int[] factor = new int[]{ FACTOR, FACTOR, FACTOR };
         _generator.SetInts("SPLIT_FACTOR", factor);
+
+        _outTriangles = new ComputeBuffer(
+            5 * FACTOR * FACTOR * FACTOR, 
+            6 * 3 * 4
+        );
+        _generator.SetBuffer(_marchCubes, "outTriangles", _outTriangles);
+
+        _outTrianglesCount = new ComputeBuffer(1, 4);
+        _generator.SetBuffer(_marchCubes, "outTrianglesCount", _outTrianglesCount);
     }
 
     /// <summary>
     /// Executed by Unity on every first frame <see cref="https://docs.unity3d.com/Manual/ExecutionOrder.html"/>
     /// </summary>
     private void Update() {
-        ComputeBuffer outVertices = new ComputeBuffer(
-            5 * FACTOR * FACTOR * FACTOR, 
-            3 * 6 * 4, 
-            ComputeBufferType.Append
-        );
-        _generator.SetBuffer(_marchCubes, "outTriangles", outVertices);
-
         uint[] groupSize = new uint[3];
         _generator.GetKernelThreadGroupSizes(_marchCubes, out groupSize[0], out groupSize[1], out groupSize[2]);
 
+        _outTrianglesCount.SetData(new int[] {0});
         _generator.Dispatch(
             _marchCubes, 
             FACTOR / (int) groupSize[0], 
@@ -90,9 +97,14 @@ public class MeshGenerator : MonoBehaviour {
         );
 
         // Here unity automatically assumes that vertices are points and hence will be represented as (x, y, z, 1) in homogenous coordinates
-        int nTriangles = outVertices.count;
+        int[] nTrianglesData = new int[1];
+        _outTrianglesCount.GetData(nTrianglesData, 0, 0, 1);
+        int nTriangles = nTrianglesData[0];
+
         Triangle[] outTriangles = new Triangle[nTriangles];
-        outVertices.GetData(outTriangles);
+        _outTriangles.GetData(outTriangles);
+
+        // Debug.Log("Total triangles: " + nTriangles[0]);
 
         Vector3[] vertices = new Vector3[3 * nTriangles];
         Vector3[]  normals = new Vector3[3 * nTriangles];
@@ -112,7 +124,5 @@ public class MeshGenerator : MonoBehaviour {
 
         // Upload mesh data to the GPU
         _mesh.UploadMeshData(false);
-
-        outVertices.Release();
     }
 }

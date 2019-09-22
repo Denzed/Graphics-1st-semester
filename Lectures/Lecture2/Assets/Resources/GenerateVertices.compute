@@ -4,9 +4,10 @@
 #include "UnityShaderVariables.cginc"  // for time
 #include "Noise.cginc"                 // Hiding creepy copy-paste
 
-const uint3 SPLIT_FACTOR;
-
-const static float3 DELTA = float3(1e-3, 1e-3, 1e-3);
+const uniform uint3 SPLIT_FACTOR;
+const static float3 INV_SPLIT_FACTOR = 1.0 / SPLIT_FACTOR;
+    
+const static float3 DELTA = INV_SPLIT_FACTOR;
 const static float3 DELTA_X = float3(1, 0, 0) * DELTA;
 const static float3 DELTA_Y = float3(0, 1, 0) * DELTA;
 const static float3 DELTA_Z = float3(0, 0, 1) * DELTA;
@@ -24,15 +25,14 @@ struct Triangle {
 };
 
 // Output triangles
-AppendStructuredBuffer<Triangle> outTriangles;
+RWStructuredBuffer<Triangle> outTriangles;
+RWStructuredBuffer<int> outTrianglesCount;
 
 float f(float3 p) {   // implicit surface definition
-    float3 d = abs(p - 0.5);
-    float dMax = max(max(d.x, d.y), d.z);
-
-    float q = 1.0 - pow(dMax * 2.0, 1.0);
-    
-    return snoise(p + _SinTime.xyz) * q;
+    if (all(abs(p - 0.5) < 0.5)) {
+        return snoise(p + _SinTime.xyz);
+    }
+    return 0.0;
 }
 
 float3 getPositionOfZeroF(float3 a, float3 b) {
@@ -52,8 +52,6 @@ float3 getNormal(float3 a) {
 [numthreads(4, 4, 4)]
 void marchCubes (uint3 id : SV_DispatchThreadID)
 {
-    float3 INV_SPLIT_FACTOR = 1.0 / SPLIT_FACTOR;
-    
     uint cubeCase = 0;
     for (uint v = 0; v < 8; v++) {
         float3 vertex = (id + cubeVertices[v]) * INV_SPLIT_FACTOR;
@@ -97,6 +95,8 @@ void marchCubes (uint3 id : SV_DispatchThreadID)
         tr.c = outTriangle[2];
         tr.nc = getNormal(tr.c);
 
-        outTriangles.Append(tr);
+        int index;
+        InterlockedAdd(outTrianglesCount[0], 1, index);
+        outTriangles[index] = tr;
     }
 }
