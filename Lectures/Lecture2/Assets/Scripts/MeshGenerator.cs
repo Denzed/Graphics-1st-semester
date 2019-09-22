@@ -5,25 +5,26 @@ using UnityEngine;
 
 [RequireComponent(typeof(MeshFilter))]
 public class MeshGenerator : MonoBehaviour {
-    private struct Triangle {
-        public Vector3 a, b, c;
-        public Vector3 na, nb, nc;
-    };
-
-    private const int FACTOR = 128;
+    private const int FACTOR = 64;
 
     private Mesh _mesh;
     private MeshFilter _filter;
     
     private ComputeShader _generator;
     private int _marchCubes;
+    private int _mapCubeCases;
     private ComputeBuffer _cubeVertices;
+
+    private ComputeBuffer _cubeCaseIds;
+    private ComputeBuffer _cubeCaseIdsCount;
 
     private ComputeBuffer _caseToTrianglesCount;
     private ComputeBuffer _caseToEdges;
 
-    private ComputeBuffer _outTriangles;
     private ComputeBuffer _outTrianglesCount;
+    private ComputeBuffer _outVertices;
+    private ComputeBuffer _outIndices;
+    private ComputeBuffer _outNormals;
     
     /// <summary>
     /// Executed by Unity upon object initialization. <see cref="https://docs.unity3d.com/Manual/ExecutionOrder.html"/>
@@ -71,55 +72,85 @@ public class MeshGenerator : MonoBehaviour {
         int[] factor = new int[]{ FACTOR, FACTOR, FACTOR };
         _generator.SetInts("SPLIT_FACTOR", factor);
 
-        _outTriangles = new ComputeBuffer(
-            5 * FACTOR * FACTOR * FACTOR, 
-            6 * 3 * 4
-        );
-        _generator.SetBuffer(_marchCubes, "outTriangles", _outTriangles);
-
         _outTrianglesCount = new ComputeBuffer(1, 4);
         _generator.SetBuffer(_marchCubes, "outTrianglesCount", _outTrianglesCount);
+
+        _outVertices = new ComputeBuffer(15 * FACTOR * FACTOR * FACTOR, 3 * 4);
+        _generator.SetBuffer(_marchCubes, "outVertices", _outVertices);
+
+        _outIndices = new ComputeBuffer(15 * FACTOR * FACTOR * FACTOR, 4);
+        _generator.SetBuffer(_marchCubes, "outIndices", _outIndices);
+
+        _outNormals = new ComputeBuffer(15 * FACTOR * FACTOR * FACTOR, 3 * 4);
+        _generator.SetBuffer(_marchCubes, "outNormals", _outNormals);
+        
+        _mapCubeCases = _generator.FindKernel("mapCubeCases");
+
+        _generator.SetBuffer(_mapCubeCases, "cubeVertices", _cubeVertices);
+
+        _cubeCaseIds = new ComputeBuffer(FACTOR * FACTOR * FACTOR, 4 * 4);
+        _generator.SetBuffer(_mapCubeCases, "outCaseIds", _cubeCaseIds);
+        _generator.SetBuffer(_marchCubes, "inCaseIds", _cubeCaseIds);
+
+        _cubeCaseIdsCount = new ComputeBuffer(1, 4);
+        _generator.SetBuffer(_mapCubeCases, "caseIdsCount", _cubeCaseIdsCount);
+        _generator.SetBuffer(_marchCubes, "caseIdsCount", _cubeCaseIdsCount);
     }
 
     /// <summary>
     /// Executed by Unity on every first frame <see cref="https://docs.unity3d.com/Manual/ExecutionOrder.html"/>
     /// </summary>
     private void Update() {
-        uint[] groupSize = new uint[3];
-        _generator.GetKernelThreadGroupSizes(_marchCubes, out groupSize[0], out groupSize[1], out groupSize[2]);
-
         _outTrianglesCount.SetData(new int[] {0});
-        _generator.Dispatch(
-            _marchCubes, 
-            FACTOR / (int) groupSize[0], 
-            FACTOR / (int) groupSize[1], 
-            FACTOR / (int) groupSize[2]
-        );
+        _cubeCaseIdsCount.SetData(new int[] {0});
+
+        uint[,] groupSizes = new uint[2, 3];
+        _generator.GetKernelThreadGroupSizes(_mapCubeCases, out groupSizes[0, 0], out groupSizes[0, 1], out groupSizes[0, 2]);
+        _generator.GetKernelThreadGroupSizes(_marchCubes, out groupSizes[1, 0], out groupSizes[1, 1], out groupSizes[1, 2]);
+
+        for (int cubeCase = 0; cubeCase < 256; cubeCase++) {
+            _generator.SetInt("inCubeCase", cubeCase);
+            
+            _generator.Dispatch(
+                _mapCubeCases,  
+                FACTOR / (int) groupSizes[0, 0], 
+                FACTOR / (int) groupSizes[0, 1], 
+                FACTOR / (int) groupSizes[0, 2]
+            );
+        }
+
+        int[] nCaseIdsData = new int[1];
+        _cubeCaseIdsCount.GetData(nCaseIdsData, 0, 0, 1);
+        int nCaseIds = nCaseIdsData[0];
+        
+        if (nCaseIds > 0) {
+            _generator.Dispatch(
+                _marchCubes, 
+                (nCaseIds - 1 + (int) groupSizes[1, 0]) / (int) groupSizes[1, 0], 
+                1, 
+                1
+            );
+        }
 
         // Here unity automatically assumes that vertices are points and hence will be represented as (x, y, z, 1) in homogenous coordinates
         int[] nTrianglesData = new int[1];
         _outTrianglesCount.GetData(nTrianglesData, 0, 0, 1);
-        int nTriangles = nTrianglesData[0];
-
-        Triangle[] outTriangles = new Triangle[nTriangles];
-        _outTriangles.GetData(outTriangles);
+        int nVertex = 3 * nTrianglesData[0];
 
         // Debug.Log("Total triangles: " + nTriangles[0]);
 
-        Vector3[] vertices = new Vector3[3 * nTriangles];
-        Vector3[]  normals = new Vector3[3 * nTriangles];
-        for (int i = 0; i < nTriangles; i++) {
-            vertices[3 * i    ] = outTriangles[i].a;
-            vertices[3 * i + 1] = outTriangles[i].b;
-            vertices[3 * i + 2] = outTriangles[i].c;
-            normals [3 * i    ] = outTriangles[i].na;
-            normals [3 * i + 1] = outTriangles[i].nb;
-            normals [3 * i + 2] = outTriangles[i].nc;
-        }
+        Vector3[] vertices = new Vector3[nVertex];
+        _outVertices.GetData(vertices, 0, 0, nVertex);
+
+        int[] indices = new int[nVertex];
+        _outIndices.GetData(indices, 0, 0, nVertex);
+
+        Vector3[] normals = new Vector3[nVertex];
+        _outNormals.GetData(normals, 0, 0, nVertex);
 
         _mesh.Clear(false);
         _mesh.vertices = vertices;
-        _mesh.triangles = Enumerable.Range(0, 3 * nTriangles).ToArray();
+        _mesh.triangles = indices;
         _mesh.normals = normals;
 
         // Upload mesh data to the GPU

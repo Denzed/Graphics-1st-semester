@@ -1,4 +1,5 @@
 ﻿// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel mapCubeCases FIRST_PASS
 #pragma kernel marchCubes
 
 #include "UnityShaderVariables.cginc"  // for time
@@ -11,22 +12,6 @@ const static float3 DELTA = INV_SPLIT_FACTOR;
 const static float3 DELTA_X = float3(1, 0, 0) * DELTA;
 const static float3 DELTA_Y = float3(0, 1, 0) * DELTA;
 const static float3 DELTA_Z = float3(0, 0, 1) * DELTA;
-
-// Cube
-StructuredBuffer<float3> cubeVertices;
-
-// Marching
-StructuredBuffer<uint> caseToTrianglesCount;
-StructuredBuffer<int3> caseToEdges;
-
-struct Triangle {
-    float3 a, b, c;
-    float3 na, nb, nc;
-};
-
-// Output triangles
-RWStructuredBuffer<Triangle> outTriangles;
-RWStructuredBuffer<int> outTrianglesCount;
 
 float f(float3 p) {   // implicit surface definition
     if (all(abs(p - 0.5) < 0.5)) {
@@ -49,26 +34,70 @@ float3 getNormal(float3 a) {
     ));
 }
 
+// Cube
+StructuredBuffer<float3> cubeVertices;
+
+#ifdef FIRST_PASS
+
+// Intermediate data
+RWStructuredBuffer<int> caseIdsCount;
+RWStructuredBuffer<int4> outCaseIds;
+const uniform int inCubeCase;
+RWStructuredBuffer<int4> inCaseIds;
+
 [numthreads(4, 4, 4)]
-void marchCubes (uint3 id : SV_DispatchThreadID)
+void mapCubeCases (uint3 id : SV_DispatchThreadID)
 {
-    uint cubeCase = 0;
+    int cubeCase = 0;
     for (uint v = 0; v < 8; v++) {
         float3 vertex = (id + cubeVertices[v]) * INV_SPLIT_FACTOR;
         if (f(vertex) > 0) {
-            cubeCase |= 1 << v;
+            cubeCase += 1 << v;
         }
     }
 
-    uint caseTriangles = caseToTrianglesCount[cubeCase];
+    if (cubeCase == inCubeCase) {
+        int index;
+        InterlockedAdd(caseIdsCount[0], 1, index);
+        
+        outCaseIds[index] = int4(id, inCubeCase);
+    }
+}
+
+#else
+
+// Marching
+StructuredBuffer<uint> caseToTrianglesCount;
+StructuredBuffer<int3> caseToEdges;
+
+// Intermediate data
+RWStructuredBuffer<int> caseIdsCount;
+RWStructuredBuffer<int4> inCaseIds;
+
+// Output triangles
+RWStructuredBuffer<int> outTrianglesCount;
+RWStructuredBuffer<float3> outVertices;
+RWStructuredBuffer<int> outIndices;
+RWStructuredBuffer<float3> outNormals;
+
+[numthreads(256, 1, 1)]
+void marchCubes (uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= caseIdsCount[0]) {
+        return;
+    }
+    int3 actualId = inCaseIds[id.x].xyz;
+    int inCubeCase = inCaseIds[id.x].w;
+
+    uint caseTriangles = caseToTrianglesCount[inCubeCase];
+    int index;
+    InterlockedAdd(outTrianglesCount[0], caseTriangles, index);
+    
     for (uint t = 0; t < caseTriangles; t++) {
-        int3 triangleEdges = caseToEdges[cubeCase * 5 + t];
-
-        float3 outTriangle[3];
-
-        uint i, j;
+        int3 triangleEdges = caseToEdges[inCubeCase * 5 + t];
 
         for (uint e = 0; e < 3; e++) {
+            uint i, j;
             uint edge = triangleEdges[e];
             if (edge < 4) {                                 
                 i = edge;                                   
@@ -81,22 +110,17 @@ void marchCubes (uint3 id : SV_DispatchThreadID)
                 j = i + 4;                                  
             }                                               
                                                             
-            outTriangle[e] = getPositionOfZeroF(            
-                (id + cubeVertices[i]) * INV_SPLIT_FACTOR,  
-                (id + cubeVertices[j]) * INV_SPLIT_FACTOR   
+            float3 vertex = getPositionOfZeroF(            
+                (actualId + cubeVertices[i]) * INV_SPLIT_FACTOR,  
+                (actualId + cubeVertices[j]) * INV_SPLIT_FACTOR   
             );
+            uint vertexIndex = 3 * (index + t) + e;
+            
+            outVertices[vertexIndex] = vertex;
+            outIndices[vertexIndex] = vertexIndex;
+            outNormals[vertexIndex] = getNormal(vertex);
         }
-
-        Triangle tr;
-        tr.a = outTriangle[0];
-        tr.na = getNormal(tr.a);
-        tr.b = outTriangle[1];
-        tr.nb = getNormal(tr.b);
-        tr.c = outTriangle[2];
-        tr.nc = getNormal(tr.c);
-
-        int index;
-        InterlockedAdd(outTrianglesCount[0], 1, index);
-        outTriangles[index] = tr;
     }
 }
+
+#endif
