@@ -45,9 +45,14 @@
                 } else {
                     Triangle tr = triangles[pid / 3];
 
-                    v.pos = UnityObjectToClipPos(tr.vn[pid % 3][0]);
+                    float3 vpos = tr.vn[pid % 3][0];
+
+                    float3 vnormal = tr.vn[pid % 3][1];
+                    vnormal.yz *= -1;
+
+                    v.pos = UnityObjectToClipPos(vpos);
                     v.uv = float2(0, 0);
-                    v.normal = UnityObjectToWorldNormal(tr.vn[pid % 3][1]);
+                    v.normal = UnityObjectToWorldNormal(vnormal);
                 }
 
                 return v;
