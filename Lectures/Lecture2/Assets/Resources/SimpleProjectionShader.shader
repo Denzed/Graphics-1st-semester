@@ -46,7 +46,7 @@
                     Triangle tr = triangles[pid / 3];
 
                     v.pos = UnityObjectToClipPos(tr.vn[pid % 3][0]);
-                    v.uv = float2(0.5, 0.5);
+                    v.uv = float2(0, 0);
                     v.normal = UnityObjectToWorldNormal(tr.vn[pid % 3][1]);
                 }
 

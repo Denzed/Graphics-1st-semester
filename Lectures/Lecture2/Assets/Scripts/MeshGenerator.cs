@@ -5,8 +5,10 @@ using Unity.Mathematics;
 using UnityEngine;
 
 public class MeshGenerator : MonoBehaviour {
-    public uint FACTOR = 128;
+    public uint FACTOR;
     public Material material;
+
+    private uint MAX_ELEMENTS;
 
     private Mesh _mesh;
     private MeshFilter _filter;
@@ -57,10 +59,7 @@ public class MeshGenerator : MonoBehaviour {
 
         _generator.SetBuffer(_marchCubes, "cubeVertices", _cubeVertices);
 
-        _outTriangles = new ComputeBuffer(
-            (int) (5 * FACTOR * FACTOR * FACTOR), 
-            6 * 3 * 4
-        );
+        _outTriangles = new ComputeBuffer((int) MAX_ELEMENTS, 6 * 3 * 4);
         _generator.SetBuffer(_marchCubes, "outTriangles", _outTriangles);
 
         uint[] groupSize = new uint[3];
@@ -85,29 +84,35 @@ public class MeshGenerator : MonoBehaviour {
     /// <summary>
     /// Executed by Unity upon object initialization. <see cref="https://docs.unity3d.com/Manual/ExecutionOrder.html"/>
     /// </summary>
-    private void Awake() {
+    private void Start() {
+        MAX_ELEMENTS = 5 * FACTOR * FACTOR * FACTOR;
+
         _filter = GetComponent<MeshFilter>();
         _mesh = _filter.mesh = new Mesh();
         _mesh.MarkDynamic();
         _mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
         
-        _mesh.vertices = new Vector3[15 * FACTOR * FACTOR * FACTOR];
+        _mesh.vertices = new Vector3[3 * MAX_ELEMENTS];
         _mesh.SetIndices(
-            Enumerable.Range(0, 15 * (int) FACTOR * (int) FACTOR * (int) FACTOR).ToArray(),
+            Enumerable.Range(0, 3 * (int) MAX_ELEMENTS).ToArray(),
             MeshTopology.Triangles,
             0
         );
+        _mesh.UploadMeshData(true);
 
         _generator = Resources.Load<ComputeShader>("GenerateVertices");
         
         setupMarch();
         setupShared();
+
+        material.SetBuffer("triangles", _outTriangles);
+        material.SetBuffer("trianglesCount", _outTrianglesCount);
     }
 
     /// <summary>
     /// Executed by Unity on every first frame <see cref="https://docs.unity3d.com/Manual/ExecutionOrder.html"/>
     /// </summary>
-    private void OnUpdate() {
+    private void OnRenderObject() {
         _outTrianglesCount.SetData(new int[] { 0, 1, 0, 0 });
 
         _generator.DispatchIndirect(_marchCubes, _indirectSizeMarch);
@@ -118,10 +123,9 @@ public class MeshGenerator : MonoBehaviour {
         // int nTriangles = nTrianglesData[0];
 
         // Debug.Log("Total triangles: " + nTriangles);
-
-        material.SetBuffer("triangles", _outTriangles);
-        material.SetBuffer("trianglesCount", _outTrianglesCount);
-        _mesh.UploadMeshData(true);
+        
+        material.SetPass(0);
+        Graphics.DrawMeshNow(_mesh, Vector3.zero, Quaternion.identity);
     }
 
     private void OnDestroy() {
