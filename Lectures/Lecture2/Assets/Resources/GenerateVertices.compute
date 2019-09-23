@@ -4,99 +4,121 @@
 #include "UnityShaderVariables.cginc"  // for time
 #include "Noise.cginc"                 // Hiding creepy copy-paste
 
+const static uint3 LAYER_GROUP_SIZE = uint3(16, 16, 1);
+
 const uniform uint3 SPLIT_FACTOR;
 const static float3 INV_SPLIT_FACTOR = 1.0 / SPLIT_FACTOR;
-    
-const static float3 DELTA = INV_SPLIT_FACTOR;
-const static float3 DELTA_X = float3(1, 0, 0) * DELTA;
-const static float3 DELTA_Y = float3(0, 1, 0) * DELTA;
-const static float3 DELTA_Z = float3(0, 0, 1) * DELTA;
 
 // Cube
-StructuredBuffer<float3> cubeVertices;
+StructuredBuffer<int3> cubeVertices;
 
 // Marching
 StructuredBuffer<uint> caseToTrianglesCount;
 StructuredBuffer<int3> caseToEdges;
 
 struct Triangle {
-    float3 a, b, c;
-    float3 na, nb, nc;
+    float3 v[3];
+    float3 n[3];
 };
 
+groupshared float cache[LAYER_GROUP_SIZE.x][LAYER_GROUP_SIZE.y][5];
+
 // Output triangles
-RWStructuredBuffer<Triangle> outTriangles;
 RWStructuredBuffer<int> outTrianglesCount;
+RWStructuredBuffer<Triangle> outTriangles;
 
 float f(float3 p) {   // implicit surface definition
-    if (all(abs(p - 0.5) < 0.5)) {
-        return snoise(p + _SinTime.xyz);
-    }
-    return 0.0;
+    return all(abs(p - 0.5) < 0.5) ? snoise(p + _SinTime.xyz) : 0.0;
 }
 
-float3 getPositionOfZeroF(float3 a, float3 b) {
-    float t = abs(f(a)) / (abs(f(a)) + abs(f(b)));
+#define cachedF_(x, y, z) cache[x][y][(z + 5) % 5u]
 
-    return a + t * (b - a);
+float cachedF(int3 a) {
+    return cachedF_(a.x, a.y, a.z);
 }
 
-float3 getNormal(float3 a) {
+float3 getNormal(int3 a) {
     return normalize(float3(
-        f(a + DELTA_X) - f(a - DELTA_X),
-        f(a + DELTA_Y) - f(a - DELTA_Y),
-        f(a + DELTA_Z) - f(a - DELTA_Z)
+        cachedF(a + int3(1, 0, 0)) - cachedF(a - int3(1, 0, 0)),
+        cachedF(a + int3(0, 1, 0)) - cachedF(a - int3(0, 1, 0)),
+        cachedF(a + int3(0, 0, 1)) - cachedF(a - int3(0, 0, 1))
     ));
 }
 
-[numthreads(4, 4, 4)]
-void marchCubes (uint3 id : SV_DispatchThreadID)
-{
-    uint cubeCase = 0;
-    for (uint v = 0; v < 8; v++) {
-        float3 vertex = (id + cubeVertices[v]) * INV_SPLIT_FACTOR;
-        if (f(vertex) > 0) {
-            cubeCase |= 1 << v;
+[numthreads(LAYER_GROUP_SIZE.x, LAYER_GROUP_SIZE.y, LAYER_GROUP_SIZE.z)]
+void marchCubes (
+    uint3 groupID : SV_GroupID, 
+    uint3 groupThreadID : SV_GroupThreadID
+) {
+    int3 cacheId0 = int3(groupThreadID.xy, 0);
+    int3 id = groupID * (LAYER_GROUP_SIZE - int3(3, 3, 0)) 
+            + cacheId0 - int3(1, 1, 0);
+
+    bool isMarching = all(
+        0 < cacheId0.xy 
+        && cacheId0.xy < (int2) LAYER_GROUP_SIZE.xy - 2 
+        && -1 < id
+        && id < (int3) SPLIT_FACTOR
+    );
+    
+    cachedF_(cacheId0.x, cacheId0.y, 4) = 0.0;
+    cachedF_(cacheId0.x, cacheId0.y, 0) = f(id * INV_SPLIT_FACTOR);
+    cachedF_(cacheId0.x, cacheId0.y, 1) = f((id + int3(0, 0, 1)) * INV_SPLIT_FACTOR);
+    cachedF_(cacheId0.x, cacheId0.y, 2) = f((id + int3(0, 0, 2)) * INV_SPLIT_FACTOR);
+    
+    for (uint layer = 0; layer < SPLIT_FACTOR.z; ++layer) {
+        GroupMemoryBarrierWithGroupSync();
+
+        int3 cacheId = int3(cacheId0.xy, layer);
+
+        cachedF_(cacheId.x, cacheId.y, layer + 3) = 
+            f((id + int3(0, 0, layer + 3)) * INV_SPLIT_FACTOR);
+
+        if (isMarching) {
+            uint cubeCase = 0;
+            for (uint v = 0; v < 8; v++) {
+                if (cachedF(cacheId + cubeVertices[v]) > 0) {
+                    cubeCase |= 1 << v;
+                }
+            }
+
+            uint caseTriangles = caseToTrianglesCount[cubeCase];
+            int index;
+            InterlockedAdd(outTrianglesCount[0], caseTriangles, index);
+            for (uint t = 0; t < caseTriangles; t++) {
+                int3 triangleEdges = caseToEdges[cubeCase * 5 + t];
+
+                uint i, j;
+
+                for (uint e = 0; e < 3; e++) {
+                    uint edge = triangleEdges[e];
+                    if (edge < 4) {                                 
+                        i = edge;                                   
+                        j = (i + 1) % 4u;                           
+                    } else if (edge < 8) {                          
+                        i = edge;                                   
+                        j = 4 + (edge - 3) % 4u;
+                    } else {                                        
+                        i = edge % 4u;                              
+                        j = i + 4;                                  
+                    }
+
+                    int3 a = cacheId + cubeVertices[i];
+                    int3 b = cacheId + cubeVertices[j];
+                    
+                    float alpha = abs(cachedF(a)) 
+                        / (abs(cachedF(a)) + abs(cachedF(b)));
+
+                    float3 v = (
+                        float3(id.xy, layer) 
+                        + cubeVertices[i] * (1 - alpha) + cubeVertices[j] * alpha
+                    ) * INV_SPLIT_FACTOR;
+                    float3 nv = getNormal(a) * (1 - alpha) + getNormal(b) * alpha;
+                                                                    
+                    outTriangles[index + t].v[e] = v;
+                    outTriangles[index + t].n[e] = nv;
+                }
+            }
         }
-    }
-
-    uint caseTriangles = caseToTrianglesCount[cubeCase];
-    for (uint t = 0; t < caseTriangles; t++) {
-        int3 triangleEdges = caseToEdges[cubeCase * 5 + t];
-
-        float3 outTriangle[3];
-
-        uint i, j;
-
-        for (uint e = 0; e < 3; e++) {
-            uint edge = triangleEdges[e];
-            if (edge < 4) {                                 
-                i = edge;                                   
-                j = (i + 1) % 4u;                           
-            } else if (edge < 8) {                          
-                i = edge;                                   
-                j = 4 + (edge - 3) % 4u;                    
-            } else {                                        
-                i = edge % 4u;                              
-                j = i + 4;                                  
-            }                                               
-                                                            
-            outTriangle[e] = getPositionOfZeroF(            
-                (id + cubeVertices[i]) * INV_SPLIT_FACTOR,  
-                (id + cubeVertices[j]) * INV_SPLIT_FACTOR   
-            );
-        }
-
-        Triangle tr;
-        tr.a = outTriangle[0];
-        tr.na = getNormal(tr.a);
-        tr.b = outTriangle[1];
-        tr.nb = getNormal(tr.b);
-        tr.c = outTriangle[2];
-        tr.nc = getNormal(tr.c);
-
-        int index;
-        InterlockedAdd(outTrianglesCount[0], 1, index);
-        outTriangles[index] = tr;
     }
 }

@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Collections.Generic;
+using Unity.Mathematics;
 using UnityEngine;
 
 [RequireComponent(typeof(MeshFilter))]
@@ -17,38 +18,32 @@ public class MeshGenerator : MonoBehaviour {
     
     private ComputeShader _generator;
     private int _marchCubes;
-    private ComputeBuffer _cubeVertices;
 
-    private ComputeBuffer _caseToTrianglesCount;
+    private ComputeBuffer _cubeVertices;
     private ComputeBuffer _caseToEdges;
+    private ComputeBuffer _caseToTrianglesCount;
 
     private ComputeBuffer _outTriangles;
     private ComputeBuffer _outTrianglesCount;
     
-    /// <summary>
-    /// Executed by Unity upon object initialization. <see cref="https://docs.unity3d.com/Manual/ExecutionOrder.html"/>
-    /// </summary>
-    private void Awake() {
-        _filter = GetComponent<MeshFilter>();
-        _mesh = _filter.mesh = new Mesh();
-        _mesh.MarkDynamic();
-        _mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+    private ComputeBuffer _indirectSizeMarch;
+    private ComputeBuffer _indirectSizeClear;
 
-        List<Vector3> sourceVertices = new List<Vector3> {
-            new Vector3(0, 0, 0), // 0
-            new Vector3(0, 1, 0), // 1
-            new Vector3(1, 1, 0), // 2
-            new Vector3(1, 0, 0), // 3
-            new Vector3(0, 0, 1), // 4
-            new Vector3(0, 1, 1), // 5
-            new Vector3(1, 1, 1), // 6
-            new Vector3(1, 0, 1), // 7
+    private void setupMarch() {
+        _marchCubes = _generator.FindKernel("marchCubes");
+
+        List<int3> sourceVertices = new List<int3> {
+            new int3(0, 0, 0), // 0
+            new int3(0, 1, 0), // 1
+            new int3(1, 1, 0), // 2
+            new int3(1, 0, 0), // 3
+            new int3(0, 0, 1), // 4
+            new int3(0, 1, 1), // 5
+            new int3(1, 1, 1), // 6
+            new int3(1, 0, 1), // 7
         };
         _cubeVertices = new ComputeBuffer(8, 3 * 4);
         _cubeVertices.SetData(sourceVertices);
-
-        _generator = Resources.Load<ComputeShader>("GenerateVertices");
-        _marchCubes = _generator.FindKernel("marchCubes");
 
         _caseToTrianglesCount = new ComputeBuffer(256, 4);
         _caseToTrianglesCount.SetData(MarchingCubes.Tables.CaseToTrianglesCount);
@@ -68,33 +63,53 @@ public class MeshGenerator : MonoBehaviour {
 
         _generator.SetBuffer(_marchCubes, "cubeVertices", _cubeVertices);
 
-        int[] factor = new int[]{ FACTOR, FACTOR, FACTOR };
-        _generator.SetInts("SPLIT_FACTOR", factor);
-
         _outTriangles = new ComputeBuffer(
             5 * FACTOR * FACTOR * FACTOR, 
             6 * 3 * 4
         );
         _generator.SetBuffer(_marchCubes, "outTriangles", _outTriangles);
 
+        uint[] groupSize = new uint[3];
+        _generator.GetKernelThreadGroupSizes(_marchCubes, out groupSize[0], out groupSize[1], out groupSize[2]);
+        
+        _indirectSizeMarch = new ComputeBuffer(3, 4, ComputeBufferType.IndirectArguments);
+        _indirectSizeMarch.SetData(new uint[] {
+            (FACTOR + groupSize[0] - 4) / (groupSize[0] - 3),
+            (FACTOR + groupSize[1] - 4) / (groupSize[1] - 3),
+            1
+        });
+    }
+
+    private void setupShared() {
+        int[] factor = new int[]{ FACTOR, FACTOR, FACTOR };
+        _generator.SetInts("SPLIT_FACTOR", factor);
+        
         _outTrianglesCount = new ComputeBuffer(1, 4);
-        _generator.SetBuffer(_marchCubes, "outTrianglesCount", _outTrianglesCount);
+        _generator.SetBuffer(_marchCubes, "outTrianglesCount", _outTrianglesCount); 
+    }
+    
+    /// <summary>
+    /// Executed by Unity upon object initialization. <see cref="https://docs.unity3d.com/Manual/ExecutionOrder.html"/>
+    /// </summary>
+    private void Awake() {
+        _filter = GetComponent<MeshFilter>();
+        _mesh = _filter.mesh = new Mesh();
+        _mesh.MarkDynamic();
+        _mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+
+        _generator = Resources.Load<ComputeShader>("GenerateVertices");
+        
+        setupMarch();
+        setupShared();
     }
 
     /// <summary>
     /// Executed by Unity on every first frame <see cref="https://docs.unity3d.com/Manual/ExecutionOrder.html"/>
     /// </summary>
     private void Update() {
-        uint[] groupSize = new uint[3];
-        _generator.GetKernelThreadGroupSizes(_marchCubes, out groupSize[0], out groupSize[1], out groupSize[2]);
+        _outTrianglesCount.SetData(new int[] { 0 });
 
-        _outTrianglesCount.SetData(new int[] {0});
-        _generator.Dispatch(
-            _marchCubes, 
-            FACTOR / (int) groupSize[0], 
-            FACTOR / (int) groupSize[1], 
-            FACTOR / (int) groupSize[2]
-        );
+        _generator.DispatchIndirect(_marchCubes, _indirectSizeMarch);
 
         // Here unity automatically assumes that vertices are points and hence will be represented as (x, y, z, 1) in homogenous coordinates
         int[] nTrianglesData = new int[1];
