@@ -6,12 +6,11 @@ using UnityEngine;
 
 public class MeshGenerator : MonoBehaviour {
     public uint FACTOR;
+    public uint STEPS;
     public Material material;
 
     private uint MAX_ELEMENTS;
-
-    private Mesh _mesh;
-    private MeshFilter _filter;
+    private uint STEP_SIZE;
     
     private ComputeShader _generator;
     private int _marchCubes;
@@ -59,7 +58,7 @@ public class MeshGenerator : MonoBehaviour {
 
         _generator.SetBuffer(_marchCubes, "cubeVertices", _cubeVertices);
 
-        _outTriangles = new ComputeBuffer((int) MAX_ELEMENTS, 6 * 3 * 4);
+        _outTriangles = new ComputeBuffer((int) MAX_ELEMENTS, 6 * 3 * 2);
         _generator.SetBuffer(_marchCubes, "outTriangles", _outTriangles);
 
         uint[] groupSize = new uint[3];
@@ -85,21 +84,9 @@ public class MeshGenerator : MonoBehaviour {
     /// Executed by Unity upon object initialization. <see cref="https://docs.unity3d.com/Manual/ExecutionOrder.html"/>
     /// </summary>
     private void Start() {
-        MAX_ELEMENTS = 5 * FACTOR * FACTOR * FACTOR;
-
-        _filter = GetComponent<MeshFilter>();
-        _mesh = _filter.mesh = new Mesh();
-        _mesh.MarkDynamic();
-        _mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+        STEP_SIZE = (FACTOR + STEPS - 1) / STEPS;
+        MAX_ELEMENTS = 5 * FACTOR * FACTOR * STEP_SIZE;
         
-        _mesh.vertices = new Vector3[3 * MAX_ELEMENTS];
-        _mesh.SetIndices(
-            Enumerable.Range(0, 3 * (int) MAX_ELEMENTS).ToArray(),
-            MeshTopology.Triangles,
-            0
-        );
-        _mesh.UploadMeshData(true);
-
         _generator = Resources.Load<ComputeShader>("GenerateVertices");
         
         setupMarch();
@@ -113,19 +100,24 @@ public class MeshGenerator : MonoBehaviour {
     /// Executed by Unity on every first frame <see cref="https://docs.unity3d.com/Manual/ExecutionOrder.html"/>
     /// </summary>
     private void OnRenderObject() {
-        _outTrianglesCount.SetData(new int[] { 0, 1, 0, 0 });
+        for (uint step = 0; step < STEPS; step++) {
+            _outTrianglesCount.SetData(new int[] { 0, 1, 0, 0 });
+            
+            _generator.SetInt("BASE_LAYER", (int) (STEP_SIZE * step));
+            _generator.SetInt("LAST_LAYER", (int) Math.Min(FACTOR, STEP_SIZE * (step + 1)));
 
-        _generator.DispatchIndirect(_marchCubes, _indirectSizeMarch);
+            _generator.DispatchIndirect(_marchCubes, _indirectSizeMarch);
 
-        // Here unity automatically assumes that vertices are points and hence will be represented as (x, y, z, 1) in homogenous coordinates
-        // int[] nTrianglesData = new int[1];
-        // _outTrianglesCount.GetData(nTrianglesData, 0, 0, 1);
-        // int nTriangles = nTrianglesData[0];
+            // Here unity automatically assumes that vertices are points and hence will be represented as (x, y, z, 1) in homogenous coordinates
+            int[] nTrianglesData = new int[1];
+            _outTrianglesCount.GetData(nTrianglesData, 0, 0, 1);
+            int nTriangles = nTrianglesData[0];
 
-        // Debug.Log("Total triangles: " + nTriangles);
-        
-        material.SetPass(0);
-        Graphics.DrawMeshNow(_mesh, Vector3.zero, Quaternion.identity);
+            // Debug.Log("Total triangles: " + nTriangles);
+            
+            material.SetPass(0);
+            Graphics.DrawProceduralNow(MeshTopology.Points, 3 * nTriangles, 1);
+        }
     }
 
     private void OnDestroy() {

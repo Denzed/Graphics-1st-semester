@@ -6,6 +6,8 @@
 
 const static uint3 LAYER_GROUP_SIZE = uint3(16, 16, 1);
 
+const uniform uint BASE_LAYER;
+const uniform uint LAST_LAYER;
 const uniform uint3 SPLIT_FACTOR;
 const static float3 INV_SPLIT_FACTOR = 1.0 / SPLIT_FACTOR;
 
@@ -50,16 +52,12 @@ const static uint2 vertexFromEdge[12] = {
     int2(0, 4), int2(1, 5), int2(2, 6), int2(3, 7), 
 };
 
-const static uint totalWork = LAYER_GROUP_SIZE.x * LAYER_GROUP_SIZE.y;
-const static uint notMarchingThreads = 2 * (LAYER_GROUP_SIZE.x + LAYER_GROUP_SIZE.y - 2);
-const static uint workForEach = (totalWork + notMarchingThreads - 1) / notMarchingThreads;
-
 [numthreads(LAYER_GROUP_SIZE.x, LAYER_GROUP_SIZE.y, LAYER_GROUP_SIZE.z)]
 void marchCubes (
     uint3 groupID : SV_GroupID, 
     uint3 groupThreadID : SV_GroupThreadID
 ) {
-    int3 cacheId0 = int3(groupThreadID.xy, 0);
+    int3 cacheId0 = int3(groupThreadID.xy, BASE_LAYER);
     int3 id = groupID * (LAYER_GROUP_SIZE - int3(3, 3, 0)) 
             + cacheId0 - int3(1, 1, 0);
 
@@ -69,25 +67,20 @@ void marchCubes (
         && id < (int3) SPLIT_FACTOR
     );
 
-    uint virtualId;
-    if (0 < cacheId0.x && cacheId0.x + 2 < LAYER_GROUP_SIZE.x) {
-        virtualId = 3 * LAYER_GROUP_SIZE.y + 3 * (cacheId0.x - 1);
-    } else if (0 == cacheId0.x) {
-        virtualId = cacheId0.y;
-    } else {
-        virtualId = (LAYER_GROUP_SIZE.x - cacheId0.x) * LAYER_GROUP_SIZE.y + cacheId0.y;
-    }
-
-    const uint workBegin = virtualId * workForEach;
-    const uint workEnd = min(workBegin + workForEach, LAYER_GROUP_SIZE.x * LAYER_GROUP_SIZE.y);
+    cachedF_(cacheId0.x, cacheId0.y, cacheId0.z + 4) = 
+        0.0;
+    cachedF_(cacheId0.x, cacheId0.y, cacheId0.z + 0) = 
+        f(id * INV_SPLIT_FACTOR);
+    cachedF_(cacheId0.x, cacheId0.y, cacheId0.z + 1) = 
+        f((id + int3(0, 0, 1)) * INV_SPLIT_FACTOR);
+    cachedF_(cacheId0.x, cacheId0.y, cacheId0.z + 2) = 
+        f((id + int3(0, 0, 2)) * INV_SPLIT_FACTOR);
     
-    cachedF_(cacheId0.x, cacheId0.y, 4) = 0.0;
-    cachedF_(cacheId0.x, cacheId0.y, 0) = f(id * INV_SPLIT_FACTOR);
-    cachedF_(cacheId0.x, cacheId0.y, 1) = f((id + int3(0, 0, 1)) * INV_SPLIT_FACTOR);
-    cachedF_(cacheId0.x, cacheId0.y, 2) = f((id + int3(0, 0, 2)) * INV_SPLIT_FACTOR);
-    
-    for (uint layer = 0; layer < SPLIT_FACTOR.z; ++layer) {
+    for (uint layer = BASE_LAYER; layer < LAST_LAYER; ++layer) {
         GroupMemoryBarrierWithGroupSync();
+
+        cachedF_(cacheId0.x, cacheId0.y, layer + 3) = 
+            f((id + int3(0, 0, layer - BASE_LAYER + 3)) * INV_SPLIT_FACTOR);
 
         int3 cacheId = int3(cacheId0.xy, layer);
 
@@ -124,14 +117,6 @@ void marchCubes (
                 }
 
                 outTriangles[index + t] = res;
-            }
-        } else {
-            for (uint workId = workBegin; workId < workEnd; ++workId) {
-                int x = workId / LAYER_GROUP_SIZE.y;
-                int y = workId - x * LAYER_GROUP_SIZE.y;
-                
-                cachedF_(x, y, layer + 3) = 
-                    f((id + int3(x - cacheId0.x, y - cacheId0.y, layer + 3)) * INV_SPLIT_FACTOR);
             }
         }
     }
