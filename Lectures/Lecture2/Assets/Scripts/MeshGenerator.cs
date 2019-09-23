@@ -4,14 +4,9 @@ using System.Collections.Generic;
 using Unity.Mathematics;
 using UnityEngine;
 
-[RequireComponent(typeof(MeshFilter))]
 public class MeshGenerator : MonoBehaviour {
-    private struct Triangle {
-        public Vector3 a, b, c;
-        public Vector3 na, nb, nc;
-    };
-
-    private const int FACTOR = 128;
+    public uint FACTOR = 128;
+    public Material material;
 
     private Mesh _mesh;
     private MeshFilter _filter;
@@ -27,7 +22,6 @@ public class MeshGenerator : MonoBehaviour {
     private ComputeBuffer _outTrianglesCount;
     
     private ComputeBuffer _indirectSizeMarch;
-    private ComputeBuffer _indirectSizeClear;
 
     private void setupMarch() {
         _marchCubes = _generator.FindKernel("marchCubes");
@@ -64,7 +58,7 @@ public class MeshGenerator : MonoBehaviour {
         _generator.SetBuffer(_marchCubes, "cubeVertices", _cubeVertices);
 
         _outTriangles = new ComputeBuffer(
-            5 * FACTOR * FACTOR * FACTOR, 
+            (int) (5 * FACTOR * FACTOR * FACTOR), 
             6 * 3 * 4
         );
         _generator.SetBuffer(_marchCubes, "outTriangles", _outTriangles);
@@ -81,10 +75,10 @@ public class MeshGenerator : MonoBehaviour {
     }
 
     private void setupShared() {
-        int[] factor = new int[]{ FACTOR, FACTOR, FACTOR };
+        int[] factor = new int[]{ (int) FACTOR, (int) FACTOR, (int) FACTOR };
         _generator.SetInts("SPLIT_FACTOR", factor);
         
-        _outTrianglesCount = new ComputeBuffer(1, 4);
+        _outTrianglesCount = new ComputeBuffer(4, 4);
         _generator.SetBuffer(_marchCubes, "outTrianglesCount", _outTrianglesCount); 
     }
     
@@ -96,6 +90,13 @@ public class MeshGenerator : MonoBehaviour {
         _mesh = _filter.mesh = new Mesh();
         _mesh.MarkDynamic();
         _mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+        
+        _mesh.vertices = new Vector3[15 * FACTOR * FACTOR * FACTOR];
+        _mesh.SetIndices(
+            Enumerable.Range(0, 15 * (int) FACTOR * (int) FACTOR * (int) FACTOR).ToArray(),
+            MeshTopology.Triangles,
+            0
+        );
 
         _generator = Resources.Load<ComputeShader>("GenerateVertices");
         
@@ -106,38 +107,29 @@ public class MeshGenerator : MonoBehaviour {
     /// <summary>
     /// Executed by Unity on every first frame <see cref="https://docs.unity3d.com/Manual/ExecutionOrder.html"/>
     /// </summary>
-    private void Update() {
-        _outTrianglesCount.SetData(new int[] { 0 });
+    private void OnUpdate() {
+        _outTrianglesCount.SetData(new int[] { 0, 1, 0, 0 });
 
         _generator.DispatchIndirect(_marchCubes, _indirectSizeMarch);
 
         // Here unity automatically assumes that vertices are points and hence will be represented as (x, y, z, 1) in homogenous coordinates
-        int[] nTrianglesData = new int[1];
-        _outTrianglesCount.GetData(nTrianglesData, 0, 0, 1);
-        int nTriangles = nTrianglesData[0];
+        // int[] nTrianglesData = new int[1];
+        // _outTrianglesCount.GetData(nTrianglesData, 0, 0, 1);
+        // int nTriangles = nTrianglesData[0];
 
-        Triangle[] outTriangles = new Triangle[nTriangles];
-        _outTriangles.GetData(outTriangles);
+        // Debug.Log("Total triangles: " + nTriangles);
 
-        // Debug.Log("Total triangles: " + nTriangles[0]);
+        material.SetBuffer("triangles", _outTriangles);
+        material.SetBuffer("trianglesCount", _outTrianglesCount);
+        _mesh.UploadMeshData(true);
+    }
 
-        Vector3[] vertices = new Vector3[3 * nTriangles];
-        Vector3[]  normals = new Vector3[3 * nTriangles];
-        for (int i = 0; i < nTriangles; i++) {
-            vertices[3 * i    ] = outTriangles[i].a;
-            vertices[3 * i + 1] = outTriangles[i].b;
-            vertices[3 * i + 2] = outTriangles[i].c;
-            normals [3 * i    ] = outTriangles[i].na;
-            normals [3 * i + 1] = outTriangles[i].nb;
-            normals [3 * i + 2] = outTriangles[i].nc;
-        }
-
-        _mesh.Clear(false);
-        _mesh.vertices = vertices;
-        _mesh.triangles = Enumerable.Range(0, 3 * nTriangles).ToArray();
-        _mesh.normals = normals;
-
-        // Upload mesh data to the GPU
-        _mesh.UploadMeshData(false);
+    private void OnDestroy() {
+        _cubeVertices.Release();
+        _caseToEdges.Release();
+        _caseToTrianglesCount.Release();
+        _outTriangles.Release();
+        _outTrianglesCount.Release();
+        _indirectSizeMarch.Release();
     }
 }

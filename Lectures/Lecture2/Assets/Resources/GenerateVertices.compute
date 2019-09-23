@@ -17,8 +17,7 @@ StructuredBuffer<uint> caseToTrianglesCount;
 StructuredBuffer<int3> caseToEdges;
 
 struct Triangle {
-    float3 v[3];
-    float3 n[3];
+    float3 vn[3][2];
 };
 
 groupshared float cache[LAYER_GROUP_SIZE.x][LAYER_GROUP_SIZE.y][5];
@@ -31,7 +30,7 @@ float f(float3 p) {   // implicit surface definition
     return all(abs(p - 0.5) < 0.5) ? snoise(p + _SinTime.xyz) : 0.0;
 }
 
-#define cachedF_(x, y, z) cache[x][y][(z + 5) % 5u]
+#define cachedF_(x, y, z) cache[x][y][(z % 5 + 5) % 5]
 
 float cachedF(int3 a) {
     return cachedF_(a.x, a.y, a.z);
@@ -45,6 +44,16 @@ float3 getNormal(int3 a) {
     ));
 }
 
+const static uint2 vertexFromEdge[12] = {
+    int2(0, 1), int2(1, 2), int2(2, 3), int2(3, 0), 
+    int2(4, 5), int2(5, 6), int2(6, 7), int2(7, 4), 
+    int2(0, 4), int2(1, 5), int2(2, 6), int2(3, 7), 
+};
+
+const static uint totalWork = LAYER_GROUP_SIZE.x * LAYER_GROUP_SIZE.y;
+const static uint notMarchingThreads = 2 * (LAYER_GROUP_SIZE.x + LAYER_GROUP_SIZE.y - 2);
+const static uint workForEach = (totalWork + notMarchingThreads - 1) / notMarchingThreads;
+
 [numthreads(LAYER_GROUP_SIZE.x, LAYER_GROUP_SIZE.y, LAYER_GROUP_SIZE.z)]
 void marchCubes (
     uint3 groupID : SV_GroupID, 
@@ -57,9 +66,20 @@ void marchCubes (
     bool isMarching = all(
         0 < cacheId0.xy 
         && cacheId0.xy < (int2) LAYER_GROUP_SIZE.xy - 2 
-        && -1 < id
         && id < (int3) SPLIT_FACTOR
     );
+
+    uint virtualId;
+    if (0 < cacheId0.x && cacheId0.x + 2 < LAYER_GROUP_SIZE.x) {
+        virtualId = 3 * LAYER_GROUP_SIZE.y + 3 * (cacheId0.x - 1);
+    } else if (0 == cacheId0.x) {
+        virtualId = cacheId0.y;
+    } else {
+        virtualId = (LAYER_GROUP_SIZE.x - cacheId0.x) * LAYER_GROUP_SIZE.y + cacheId0.y;
+    }
+
+    const uint workBegin = virtualId * workForEach;
+    const uint workEnd = min(workBegin + workForEach, LAYER_GROUP_SIZE.x * LAYER_GROUP_SIZE.y);
     
     cachedF_(cacheId0.x, cacheId0.y, 4) = 0.0;
     cachedF_(cacheId0.x, cacheId0.y, 0) = f(id * INV_SPLIT_FACTOR);
@@ -70,9 +90,6 @@ void marchCubes (
         GroupMemoryBarrierWithGroupSync();
 
         int3 cacheId = int3(cacheId0.xy, layer);
-
-        cachedF_(cacheId.x, cacheId.y, layer + 3) = 
-            f((id + int3(0, 0, layer + 3)) * INV_SPLIT_FACTOR);
 
         if (isMarching) {
             uint cubeCase = 0;
@@ -88,36 +105,33 @@ void marchCubes (
             for (uint t = 0; t < caseTriangles; t++) {
                 int3 triangleEdges = caseToEdges[cubeCase * 5 + t];
 
-                uint i, j;
+                Triangle res;
 
                 for (uint e = 0; e < 3; e++) {
-                    uint edge = triangleEdges[e];
-                    if (edge < 4) {                                 
-                        i = edge;                                   
-                        j = (i + 1) % 4u;                           
-                    } else if (edge < 8) {                          
-                        i = edge;                                   
-                        j = 4 + (edge - 3) % 4u;
-                    } else {                                        
-                        i = edge % 4u;                              
-                        j = i + 4;                                  
-                    }
+                    uint2 ij = vertexFromEdge[triangleEdges[e]];
 
-                    int3 a = cacheId + cubeVertices[i];
-                    int3 b = cacheId + cubeVertices[j];
+                    int3 a = cacheId + cubeVertices[ij.x];
+                    int3 b = cacheId + cubeVertices[ij.y];
                     
-                    float alpha = abs(cachedF(a)) 
-                        / (abs(cachedF(a)) + abs(cachedF(b)));
-
-                    float3 v = (
-                        float3(id.xy, layer) 
-                        + cubeVertices[i] * (1 - alpha) + cubeVertices[j] * alpha
-                    ) * INV_SPLIT_FACTOR;
-                    float3 nv = getNormal(a) * (1 - alpha) + getNormal(b) * alpha;
+                    float alpha = abs(cachedF(a)) / (abs(cachedF(a)) + abs(cachedF(b)));
                                                                     
-                    outTriangles[index + t].v[e] = v;
-                    outTriangles[index + t].n[e] = nv;
+                    res.vn[e][0] = (
+                        float3(id.xy, layer) 
+                        + cubeVertices[ij.x] * (1 - alpha) + cubeVertices[ij.y] * alpha
+                    ) * INV_SPLIT_FACTOR;
+                    
+                    res.vn[e][1] = getNormal(a) * (1 - alpha) + getNormal(b) * alpha;
                 }
+
+                outTriangles[index + t] = res;
+            }
+        } else {
+            for (uint workId = workBegin; workId < workEnd; ++workId) {
+                int x = workId / LAYER_GROUP_SIZE.y;
+                int y = workId - x * LAYER_GROUP_SIZE.y;
+                
+                cachedF_(x, y, layer + 3) = 
+                    f((id + int3(x - cacheId0.x, y - cacheId0.y, layer + 3)) * INV_SPLIT_FACTOR);
             }
         }
     }

@@ -1,4 +1,4 @@
-﻿Shader "Custom/BrokenShader"
+﻿Shader "TrianglesFromBuffer"
 {
     Properties
     {
@@ -18,11 +18,17 @@
             Tags {"LightMode"="ForwardBase"}
         
             CGPROGRAM
-            #pragma enable_d3d11_debug_symbols
             #pragma vertex vert
             #pragma fragment frag
             #include "UnityCG.cginc" // for UnityObjectToWorldNormal
             #include "UnityLightingCommon.cginc" // for _LightColor0
+
+            struct Triangle {
+                float3 vn[3][2];
+            };
+
+            StructuredBuffer<Triangle> triangles;
+            StructuredBuffer<uint> trianglesCount;
 
             struct v2f
             {
@@ -31,15 +37,22 @@
                 fixed3 normal : NORMAL;
             };
 
-            v2f vert (appdata_base v)
-            {
-                v2f o;
-                o.pos = UnityObjectToClipPos(v.vertex);
-                o.uv = v.texcoord;
-                o.normal = UnityObjectToWorldNormal(v.normal);
-                return o;
+            v2f vert (uint pid : SV_VertexID) {
+                v2f v;
+
+                if (pid >= trianglesCount[0] * 3) {
+                    v.pos = float4(-2, -2, -2, 1);
+                } else {
+                    Triangle tr = triangles[pid / 3];
+
+                    v.pos = UnityObjectToClipPos(tr.vn[pid % 3][0]);
+                    v.uv = float2(0.5, 0.5);
+                    v.normal = UnityObjectToWorldNormal(tr.vn[pid % 3][1]);
+                }
+
+                return v;
             }
-            
+
             sampler2D _MainTex;
 
             fixed4 frag (v2f i) : SV_Target
