@@ -109,11 +109,11 @@ void marchCubes (
                     float alpha = abs(cachedF(a)) / (abs(cachedF(a)) + abs(cachedF(b)));
                                                                     
                     res.vn[e][0] = (
-                        float3(id.xy, layer) 
-                        + cubeVertices[ij.x] * (1 - alpha) + cubeVertices[ij.y] * alpha
+                        float3(id + int3(0, 0, layer - BASE_LAYER))
+                        + lerp(cubeVertices[ij.x], cubeVertices[ij.y], alpha)
                     ) * INV_SPLIT_FACTOR;
                     
-                    res.vn[e][1] = getNormal(a) * (1 - alpha) + getNormal(b) * alpha;
+                    res.vn[e][1] = normalize(lerp(getNormal(a), getNormal(b), alpha));
                 }
 
                 outTriangles[index + t] = res;

@@ -58,7 +58,7 @@ public class MeshGenerator : MonoBehaviour {
 
         _generator.SetBuffer(_marchCubes, "cubeVertices", _cubeVertices);
 
-        _outTriangles = new ComputeBuffer((int) MAX_ELEMENTS, 6 * 3 * 2);
+        _outTriangles = new ComputeBuffer((int) MAX_ELEMENTS, 6 * 3 * 4);
         _generator.SetBuffer(_marchCubes, "outTriangles", _outTriangles);
 
         uint[] groupSize = new uint[3];
@@ -116,7 +116,7 @@ public class MeshGenerator : MonoBehaviour {
             // Debug.Log("Total triangles: " + nTriangles);
             
             material.SetPass(0);
-            Graphics.DrawProceduralNow(MeshTopology.Points, 3 * nTriangles, 1);
+            Graphics.DrawProceduralNow(MeshTopology.Triangles, 3 * nTriangles, 1);
         }
     }
 
