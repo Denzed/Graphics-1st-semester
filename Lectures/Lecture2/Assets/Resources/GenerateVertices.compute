@@ -13,13 +13,19 @@ const static float3 INV_SPLIT_FACTOR = 1.0 / SPLIT_FACTOR;
 
 // Cube
 StructuredBuffer<int3> cubeVertices;
+const uniform float4x4 vertexTransform;
 
 // Marching
 StructuredBuffer<uint> caseToTrianglesCount;
 StructuredBuffer<int3> caseToEdges;
 
+struct VertexData {
+    float4 pos;
+    float3 uvw, normal;
+};
+
 struct Triangle {
-    float3 vn[3][2];
+    VertexData v[3];
 };
 
 groupshared float cache[LAYER_GROUP_SIZE.x][LAYER_GROUP_SIZE.y][5];
@@ -28,11 +34,15 @@ groupshared float cache[LAYER_GROUP_SIZE.x][LAYER_GROUP_SIZE.y][5];
 RWStructuredBuffer<int> outTrianglesCount;
 RWStructuredBuffer<Triangle> outTriangles;
 
-float f(float3 p) {   // implicit surface definition
-    return all(abs(p - 0.5) < 0.5) ? snoise(p + _SinTime.xyz) : 0.0;
+float tmp(float3 p) {
+    return snoise(p * 2.0) / 2.0 + snoise(p * 4.0) / 4.0 + snoise(p * 8.0) / 8.0;
 }
 
-#define cachedF_(x, y, z) cache[x][y][(z % 5 + 5) % 5]
+float f(float3 p) {   // implicit surface definition
+    return all(abs(p - 0.5) < 0.5) ? tmp((p + _SinTime.xyz) * float3(1.0, 1.0, 0.0)) - p.z * 2.0 : 0.0;
+}
+
+#define cachedF_(x, y, z) cache[x][y][(z + 5) % 5u]
 
 float cachedF(int3 a) {
     return cachedF_(a.x, a.y, a.z);
@@ -107,13 +117,14 @@ void marchCubes (
                     int3 b = cacheId + cubeVertices[ij.y];
                     
                     float alpha = abs(cachedF(a)) / (abs(cachedF(a)) + abs(cachedF(b)));
-                                                                    
-                    res.vn[e][0] = (
-                        float3(id + int3(0, 0, layer - BASE_LAYER))
-                        + lerp(cubeVertices[ij.x], cubeVertices[ij.y], alpha)
-                    ) * INV_SPLIT_FACTOR;
-                    
-                    res.vn[e][1] = normalize(lerp(getNormal(a), getNormal(b), alpha));
+
+                    float4 v = float4((
+                        id + int3(0, 0, layer - BASE_LAYER) + lerp(cubeVertices[ij.x], cubeVertices[ij.y], alpha)
+                    ) * INV_SPLIT_FACTOR, 1.0);
+
+                    res.v[e].uvw = mul(vertexTransform, v + float4(_SinTime.xy, 0.0, 0.0)).xyz;
+                    res.v[e].pos = mul(vertexTransform, v);
+                    res.v[e].normal = normalize(lerp(getNormal(a), getNormal(b), alpha));
                 }
 
                 outTriangles[index + t] = res;

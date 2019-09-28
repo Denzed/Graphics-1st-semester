@@ -3,6 +3,7 @@ using System.Linq;
 using System.Collections.Generic;
 using Unity.Mathematics;
 using UnityEngine;
+using UnityEditor;
 
 public class MeshGenerator : MonoBehaviour {
     public uint FACTOR;
@@ -58,7 +59,7 @@ public class MeshGenerator : MonoBehaviour {
 
         _generator.SetBuffer(_marchCubes, "cubeVertices", _cubeVertices);
 
-        _outTriangles = new ComputeBuffer((int) MAX_ELEMENTS, 6 * 3 * 4);
+        _outTriangles = new ComputeBuffer((int) MAX_ELEMENTS, 3 * (3 * 3 * 4 + 1 * 4 * 4));
         _generator.SetBuffer(_marchCubes, "outTriangles", _outTriangles);
 
         uint[] groupSize = new uint[3];
@@ -105,6 +106,7 @@ public class MeshGenerator : MonoBehaviour {
             
             _generator.SetInt("BASE_LAYER", (int) (STEP_SIZE * step));
             _generator.SetInt("LAST_LAYER", (int) Math.Min(FACTOR, STEP_SIZE * (step + 1)));
+            _generator.SetMatrix("vertexTransform", gameObject.transform.localToWorldMatrix);
 
             _generator.DispatchIndirect(_marchCubes, _indirectSizeMarch);
 
