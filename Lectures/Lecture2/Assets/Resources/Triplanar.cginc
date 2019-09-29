@@ -7,7 +7,7 @@ fixed3 tex2DtriplanarBlend(sampler2D xTex, sampler2D yTex, sampler2D zTex, float
     fixed3 colorZ = tex2D(zTex, uvw.xy * 10).xyz; // grass is too rough
 
     // Height Map Triplanar Blend
-    float3 blend = pow(abs(normal.xyz), 16.0);
+    float3 blend = pow(abs(normal.xyz), 4.0);
     blend /= dot(blend, float3(1,1,1));
     
     // Height value from each plane's texture. This is usually
@@ -17,7 +17,7 @@ fixed3 tex2DtriplanarBlend(sampler2D xTex, sampler2D yTex, sampler2D zTex, float
     
     // _HeightmapBlending is a value between 0.01 and 1.0
     float height_start = 0.0;
-    float3 h = max(heights - height_start, float3(0,0,0));
+    float3 h = max(heights - height_start, float3(0,0,0)) - _HeightmapBlending;
     blend = h / dot(h, float3(1,1,1));
 
     // Swizzle tangent colors to match world orientation and triblend

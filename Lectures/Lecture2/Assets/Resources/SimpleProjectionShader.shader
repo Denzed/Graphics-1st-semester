@@ -25,42 +25,52 @@
             #include "UnityCG.cginc" // for UnityObjectToWorldNormal
             #include "UnityLightingCommon.cginc" // for _LightColor0
             #include "Triplanar.cginc" // for triplanar texture mapping
+            #include "UnityShaderVariables.cginc"  // for time
 
             struct VertexData {
-                float4 pos : POSITION;
-                float3 uvw : TEXCOORD;
-                float3 normal : NORMAL;
+                float3 pos, normal;
             };
 
             struct Triangle {
                 VertexData v[3];
             };
+            
+            struct VertexDataV2F {
+                float4 pos : POSITION;
+                float3 uvw : TEXCOORD;
+                float3 worldNormal : NORMAL0;
+                float3 normal : NORMAL1;
+            };
 
             StructuredBuffer<Triangle> triangles;
             StructuredBuffer<uint> trianglesCount;
 
-            VertexData vert (uint pid : SV_VertexID) {
-                VertexData outV;
+            const uniform float4x4 vertexTransform;
+
+            VertexDataV2F vert (uint pid : SV_VertexID) {
+                VertexDataV2F outV;
 
                 if (pid >= trianglesCount[0] * 3) {
                     outV.pos = float4(-2, -2, -2, 1);
                 } else {
-                    outV = triangles[pid / 3].v[pid % 3];
-                    
-                    outV.pos = UnityObjectToClipPos(outV.pos);
-                    outV.normal = UnityObjectToWorldNormal(outV.normal);
+                    outV.uvw = triangles[pid / 3].v[pid % 3].pos + float3(_SinTime.xy, 0);
+                    outV.pos = UnityObjectToClipPos(mul(
+                        vertexTransform,
+                        triangles[pid / 3].v[pid % 3].pos
+                    ));
+                    outV.normal = triangles[pid / 3].v[pid % 3].normal;
+                    outV.worldNormal = UnityObjectToWorldNormal(outV.normal);
                 }
 
                 return outV;
             }
-
             sampler2D _xTex, _yTex, _zTex;
 
-            fixed4 frag (VertexData i) : SV_Target
+            fixed4 frag (VertexDataV2F i) : SV_Target
             {
-                half nl = max(0, dot(i.normal, _WorldSpaceLightPos0.xyz));
+                half nl = max(0, dot(i.worldNormal, _WorldSpaceLightPos0.xyz));
                 half3 light = nl * _LightColor0;
-                light += ShadeSH9(half4(i.normal,1));
+                light += ShadeSH9(half4(i.worldNormal,1));
                 
                 fixed4 col = fixed4(tex2DtriplanarBlend(_xTex, _yTex, _zTex, i.uvw, i.normal), 1.0);
                 col.rgb *= light;

@@ -8,6 +8,7 @@ using UnityEditor;
 public class MeshGenerator : MonoBehaviour {
     public uint FACTOR;
     public uint STEPS;
+    public uint OCTAVE_COUNT;
     public Material material;
 
     private uint MAX_ELEMENTS;
@@ -71,14 +72,18 @@ public class MeshGenerator : MonoBehaviour {
             (FACTOR + groupSize[1] - 4) / (groupSize[1] - 3),
             1
         });
-    }
-
-    private void setupShared() {
-        int[] factor = new int[]{ (int) FACTOR, (int) FACTOR, (int) FACTOR };
-        _generator.SetInts("SPLIT_FACTOR", factor);
         
         _outTrianglesCount = new ComputeBuffer(4, 4);
         _generator.SetBuffer(_marchCubes, "outTrianglesCount", _outTrianglesCount); 
+    }
+
+    private void setupShared() {
+        _generator.SetInts(
+            "SPLIT_FACTOR", 
+            new int[]{ (int) FACTOR, (int) FACTOR, (int) FACTOR }
+        );
+        
+        _generator.SetInt("OCTAVE_COUNT", (int) OCTAVE_COUNT);
     }
     
     /// <summary>
@@ -95,19 +100,39 @@ public class MeshGenerator : MonoBehaviour {
 
         material.SetBuffer("triangles", _outTriangles);
         material.SetBuffer("trianglesCount", _outTrianglesCount);
+
+        // generate surface
+        int generateTexture = _generator.FindKernel("generateTexture");
+
+        RenderTexture surfaceTexture = new RenderTexture(
+            (int) FACTOR, (int) FACTOR, 1, 
+            RenderTextureFormat.RFloat,
+            RenderTextureReadWrite.Linear
+        );
+        surfaceTexture.enableRandomWrite = true;
+        surfaceTexture.Create();
+        _generator.SetTexture(generateTexture, "outSurfaceTexture", surfaceTexture);
+        _generator.Dispatch(generateTexture, (int) FACTOR, (int) FACTOR, 1);
+        
+        _generator.SetTexture(_marchCubes, "surfaceTexture", surfaceTexture);
     }
 
     /// <summary>
     /// Executed by Unity on every first frame <see cref="https://docs.unity3d.com/Manual/ExecutionOrder.html"/>
     /// </summary>
     private void OnRenderObject() {
-        for (uint step = 0; step < STEPS; step++) {
+        material.SetMatrix("vertexTransform", gameObject.transform.localToWorldMatrix);
+        
+        for (int step = 0; step < STEPS; step++) {
             _outTrianglesCount.SetData(new int[] { 0, 1, 0, 0 });
             
-            _generator.SetInt("BASE_LAYER", (int) (STEP_SIZE * step));
-            _generator.SetInt("LAST_LAYER", (int) Math.Min(FACTOR, STEP_SIZE * (step + 1)));
-            _generator.SetMatrix("vertexTransform", gameObject.transform.localToWorldMatrix);
-
+            _generator.SetInts(
+                "LAYER_BOUNDS", 
+                new int[] { 
+                    (int) STEP_SIZE * step, 
+                    (int) Math.Min(FACTOR, STEP_SIZE * (step + 1)) 
+            });
+            
             _generator.DispatchIndirect(_marchCubes, _indirectSizeMarch);
 
             // Here unity automatically assumes that vertices are points and hence will be represented as (x, y, z, 1) in homogenous coordinates

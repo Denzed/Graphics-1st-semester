@@ -55,6 +55,18 @@ Material:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
+    - _xTex:
+        m_Texture: {fileID: 2800000, guid: 5637d3ca8428903fca29a9513c6ec9de, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _yTex:
+        m_Texture: {fileID: 2800000, guid: 5637d3ca8428903fca29a9513c6ec9de, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _zTex:
+        m_Texture: {fileID: 2800000, guid: 6217270d06102c23298e8813c78b6bb0, type: 3}
+        m_Scale: {x: 0.1, y: 0.1}
+        m_Offset: {x: 0, y: 0}
     m_Floats:
     - _BumpScale: 1
     - _Cutoff: 0.5

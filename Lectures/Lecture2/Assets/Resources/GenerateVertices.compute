@@ -1,48 +1,82 @@
 ﻿// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel generateTexture TEXTURE_GENERATION
 #pragma kernel marchCubes
 
 #include "UnityShaderVariables.cginc"  // for time
-#include "Noise.cginc"                 // Hiding creepy copy-paste
 
 const static uint3 LAYER_GROUP_SIZE = uint3(16, 16, 1);
 
-const uniform uint BASE_LAYER;
-const uniform uint LAST_LAYER;
+const uniform uint2 LAYER_BOUNDS;
 const uniform uint3 SPLIT_FACTOR;
 const static float3 INV_SPLIT_FACTOR = 1.0 / SPLIT_FACTOR;
 
+const uniform uint OCTAVE_COUNT;
+
+
+#ifdef TEXTURE_GENERATION
+
+
+#define SIMPLEX_2D
+#include "Noise.cginc"                 // All noise belongs here
+#undef SIMPLEX_2D
+
+RWTexture2D<float> outSurfaceTexture;
+
+float fWithOctaves(float3 p) {
+    float result = 0.0;
+
+    float q = 2.0;
+    for (uint o = 0; o < OCTAVE_COUNT; ++o) {
+        result += snoise(p.xy * q) / q;
+        q *= 2.0;
+    }
+    return result;
+}
+
+[numthreads(32, 32, 1)]
+void generateTexture (
+    uint3 threadID : SV_DispatchThreadID
+) {
+    outSurfaceTexture[threadID.xy] = fWithOctaves(threadID * INV_SPLIT_FACTOR);
+}
+
+#else
+
 // Cube
 StructuredBuffer<int3> cubeVertices;
-const uniform float4x4 vertexTransform;
+
+// Surface
+Texture2D<float> surfaceTexture;
+SamplerState sampler_linear_mirror;
+
+float f(float3 p) {   // implicit surface definition
+    return all(abs(p - 0.5) < 0.5) 
+        ? surfaceTexture.SampleLevel(
+             sampler_linear_mirror, 
+             p.xy + _SinTime.xy, 0
+        ) + 0.2 - p.z * 3.0 
+        : 0.0;
+}
 
 // Marching
 StructuredBuffer<uint> caseToTrianglesCount;
 StructuredBuffer<int3> caseToEdges;
 
 struct VertexData {
-    float4 pos;
-    float3 uvw, normal;
+    float3 pos, normal;
 };
 
 struct Triangle {
     VertexData v[3];
 };
 
-groupshared float cache[LAYER_GROUP_SIZE.x][LAYER_GROUP_SIZE.y][5];
+groupshared float cache[5][LAYER_GROUP_SIZE.x][LAYER_GROUP_SIZE.y];
 
 // Output triangles
 RWStructuredBuffer<int> outTrianglesCount;
 RWStructuredBuffer<Triangle> outTriangles;
 
-float tmp(float3 p) {
-    return snoise(p * 2.0) / 2.0 + snoise(p * 4.0) / 4.0 + snoise(p * 8.0) / 8.0;
-}
-
-float f(float3 p) {   // implicit surface definition
-    return all(abs(p - 0.5) < 0.5) ? tmp((p + _SinTime.xyz) * float3(1.0, 1.0, 0.0)) - p.z * 2.0 : 0.0;
-}
-
-#define cachedF_(x, y, z) cache[x][y][(z + 5) % 5u]
+#define cachedF_(x, y, z) cache[(z + 5) % 5u][x][y]
 
 float cachedF(int3 a) {
     return cachedF_(a.x, a.y, a.z);
@@ -67,7 +101,7 @@ void marchCubes (
     uint3 groupID : SV_GroupID, 
     uint3 groupThreadID : SV_GroupThreadID
 ) {
-    int3 cacheId0 = int3(groupThreadID.xy, BASE_LAYER);
+    int3 cacheId0 = int3(groupThreadID.xy, LAYER_BOUNDS.x);
     int3 id = groupID * (LAYER_GROUP_SIZE - int3(3, 3, 0)) 
             + cacheId0 - int3(1, 1, 0);
 
@@ -78,7 +112,7 @@ void marchCubes (
     );
 
     cachedF_(cacheId0.x, cacheId0.y, cacheId0.z + 4) = 
-        0.0;
+        f((id - int3(0, 0, 1)) * INV_SPLIT_FACTOR);
     cachedF_(cacheId0.x, cacheId0.y, cacheId0.z + 0) = 
         f(id * INV_SPLIT_FACTOR);
     cachedF_(cacheId0.x, cacheId0.y, cacheId0.z + 1) = 
@@ -86,11 +120,11 @@ void marchCubes (
     cachedF_(cacheId0.x, cacheId0.y, cacheId0.z + 2) = 
         f((id + int3(0, 0, 2)) * INV_SPLIT_FACTOR);
     
-    for (uint layer = BASE_LAYER; layer < LAST_LAYER; ++layer) {
+    for (uint layer = LAYER_BOUNDS.x; layer < LAYER_BOUNDS.y; ++layer) {
         GroupMemoryBarrierWithGroupSync();
 
         cachedF_(cacheId0.x, cacheId0.y, layer + 3) = 
-            f((id + int3(0, 0, layer - BASE_LAYER + 3)) * INV_SPLIT_FACTOR);
+            f((id + int3(0, 0, layer - LAYER_BOUNDS.x + 3)) * INV_SPLIT_FACTOR);
 
         int3 cacheId = int3(cacheId0.xy, layer);
 
@@ -118,12 +152,9 @@ void marchCubes (
                     
                     float alpha = abs(cachedF(a)) / (abs(cachedF(a)) + abs(cachedF(b)));
 
-                    float4 v = float4((
-                        id + int3(0, 0, layer - BASE_LAYER) + lerp(cubeVertices[ij.x], cubeVertices[ij.y], alpha)
-                    ) * INV_SPLIT_FACTOR, 1.0);
-
-                    res.v[e].uvw = mul(vertexTransform, v + float4(_SinTime.xy, 0.0, 0.0)).xyz;
-                    res.v[e].pos = mul(vertexTransform, v);
+                    res.v[e].pos = (
+                        id + int3(0, 0, layer - LAYER_BOUNDS.x) + lerp(cubeVertices[ij.x], cubeVertices[ij.y], alpha)
+                    ) * INV_SPLIT_FACTOR;
                     res.v[e].normal = normalize(lerp(getNormal(a), getNormal(b), alpha));
                 }
 
@@ -132,3 +163,6 @@ void marchCubes (
         }
     }
 }
+
+
+#endif
