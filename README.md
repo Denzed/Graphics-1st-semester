@@ -12,6 +12,6 @@ Tasks and lectures for CG course
 
     Upgraded 2 with triplanar shading and moved from noise to cycled terrain.
 
-    Also noise is now cached at the start thus allowing 30-40 FPS @ 512 split ratio (or it is because of flat terrain instead of whole \[0,1\]^3 cube noise):
+    Also noise is now cached at the start thus allowing 40 FPS @ 512 split ratio (or it is because of flat terrain instead of whole \[0,1\]^3 cube noise):
 
     ![](Lectures/Lecture3/Terrain.png)

@@ -74,9 +74,9 @@ public class MeshGenerator : MonoBehaviour {
         
         _indirectSizeMarch = new ComputeBuffer(3, 4, ComputeBufferType.IndirectArguments);
         _indirectSizeMarch.SetData(new uint[] {
-            FACTOR / groupSize[0],
-            FACTOR / groupSize[1],
-            FACTOR / groupSize[2] / STEPS
+            (FACTOR + groupSize[0] - 1) / groupSize[0],
+            (FACTOR + groupSize[1] - 1) / groupSize[1],
+            ((FACTOR + groupSize[2] - 1) / groupSize[2] + STEPS - 1) / STEPS
         });
         
         _outPointsCount = new ComputeBuffer(4, 4);

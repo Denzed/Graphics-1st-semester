@@ -34,7 +34,7 @@ float fWithOctaves(float3 p) {
             sin(p.y * 2 * PI)
         ) * q;
 
-        q *= 2.0;
+        q *= 3.0;
         result += snoise(pnt) / q;
     }
     return result;
@@ -44,7 +44,11 @@ float fWithOctaves(float3 p) {
 void generateTexture (
     uint3 threadID : SV_DispatchThreadID
 ) {
-    outSurfaceTexture[threadID.xy] = fWithOctaves(threadID * INV_SPLIT_FACTOR);
+    if (!all(threadID.xy < SPLIT_FACTOR.xy)) {
+        return;
+    }
+
+    outSurfaceTexture[threadID.xy + 0.5] = fWithOctaves(threadID * INV_SPLIT_FACTOR);
 }
 
 #else
@@ -95,6 +99,10 @@ const static uint2 vertexFromEdge[12] = {
 
 [numthreads(LAYER_GROUP_SIZE.x, LAYER_GROUP_SIZE.y, LAYER_GROUP_SIZE.z)]
 void marchCubes (uint3 threadID : SV_DispatchThreadID) {
+    if (!all(threadID < SPLIT_FACTOR)) {
+        return;
+    }
+
     int3 id = threadID + int3(0, 0, LAYER_OFFSET);
 
     uint cubeCase = 0;
