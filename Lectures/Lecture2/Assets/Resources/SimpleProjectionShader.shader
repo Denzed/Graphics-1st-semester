@@ -20,19 +20,15 @@
             Tags {"LightMode"="ForwardBase"}
         
             CGPROGRAM
+            #pragma target 5.0
             #pragma vertex vert
             #pragma fragment frag
             #include "UnityCG.cginc" // for UnityObjectToWorldNormal
             #include "UnityLightingCommon.cginc" // for _LightColor0
             #include "Triplanar.cginc" // for triplanar texture mapping
-            #include "UnityShaderVariables.cginc"  // for time
 
             struct VertexData {
                 float3 pos, normal;
-            };
-
-            struct Triangle {
-                VertexData v[3];
             };
             
             struct VertexDataV2F {
@@ -42,28 +38,25 @@
                 float3 normal : NORMAL1;
             };
 
-            StructuredBuffer<Triangle> triangles;
-            StructuredBuffer<uint> trianglesCount;
+            StructuredBuffer<VertexData> points;
 
+            const uniform float TIME;
             const uniform float4x4 vertexTransform;
 
             VertexDataV2F vert (uint pid : SV_VertexID) {
                 VertexDataV2F outV;
 
-                if (pid >= trianglesCount[0] * 3) {
-                    outV.pos = float4(-2, -2, -2, 1);
-                } else {
-                    outV.uvw = triangles[pid / 3].v[pid % 3].pos + float3(_SinTime.xy, 0);
-                    outV.pos = UnityObjectToClipPos(mul(
-                        vertexTransform,
-                        triangles[pid / 3].v[pid % 3].pos
-                    ));
-                    outV.normal = triangles[pid / 3].v[pid % 3].normal;
-                    outV.worldNormal = UnityObjectToWorldNormal(outV.normal);
-                }
+                outV.uvw = points[pid].pos + float3(sin(TIME), cos(TIME), 0);
+                outV.pos = UnityObjectToClipPos(mul(
+                    vertexTransform,
+                    points[pid].pos
+                ));
+                outV.normal = points[pid].normal;
+                outV.worldNormal = UnityObjectToWorldNormal(outV.normal);
 
                 return outV;
             }
+
             sampler2D _xTex, _yTex, _zTex;
 
             fixed4 frag (VertexDataV2F i) : SV_Target

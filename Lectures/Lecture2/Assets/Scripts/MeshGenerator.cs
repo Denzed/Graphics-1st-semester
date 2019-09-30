@@ -1,15 +1,21 @@
 using System;
 using System.Linq;
 using System.Collections.Generic;
+using System.Reflection;
 using Unity.Mathematics;
 using UnityEngine;
-using UnityEditor;
 
 public class MeshGenerator : MonoBehaviour {
     public uint FACTOR;
     public uint STEPS;
     public uint OCTAVE_COUNT;
     public Material material;
+
+    private bool isIndirectAvailable = 
+        typeof(Graphics).GetMethod(
+            "DrawProceduralIndirectNow", 
+            BindingFlags.Static
+        ) != null;
 
     private uint MAX_ELEMENTS;
     private uint STEP_SIZE;
@@ -21,8 +27,8 @@ public class MeshGenerator : MonoBehaviour {
     private ComputeBuffer _caseToEdges;
     private ComputeBuffer _caseToTrianglesCount;
 
-    private ComputeBuffer _outTriangles;
-    private ComputeBuffer _outTrianglesCount;
+    private ComputeBuffer _outPoints;
+    private ComputeBuffer _outPointsCount;
     
     private ComputeBuffer _indirectSizeMarch;
 
@@ -60,21 +66,21 @@ public class MeshGenerator : MonoBehaviour {
 
         _generator.SetBuffer(_marchCubes, "cubeVertices", _cubeVertices);
 
-        _outTriangles = new ComputeBuffer((int) MAX_ELEMENTS, 3 * (3 * 3 * 4 + 1 * 4 * 4));
-        _generator.SetBuffer(_marchCubes, "outTriangles", _outTriangles);
+        _outPoints = new ComputeBuffer(3 * (int) MAX_ELEMENTS, 2 * 3 * 4);
+        _generator.SetBuffer(_marchCubes, "outPoints", _outPoints);
 
         uint[] groupSize = new uint[3];
         _generator.GetKernelThreadGroupSizes(_marchCubes, out groupSize[0], out groupSize[1], out groupSize[2]);
         
         _indirectSizeMarch = new ComputeBuffer(3, 4, ComputeBufferType.IndirectArguments);
         _indirectSizeMarch.SetData(new uint[] {
-            (FACTOR + groupSize[0] - 4) / (groupSize[0] - 3),
-            (FACTOR + groupSize[1] - 4) / (groupSize[1] - 3),
-            1
+            FACTOR / groupSize[0],
+            FACTOR / groupSize[1],
+            FACTOR / groupSize[2] / STEPS
         });
         
-        _outTrianglesCount = new ComputeBuffer(4, 4);
-        _generator.SetBuffer(_marchCubes, "outTrianglesCount", _outTrianglesCount); 
+        _outPointsCount = new ComputeBuffer(4, 4);
+        _generator.SetBuffer(_marchCubes, "outPointsCount", _outPointsCount); 
     }
 
     private void setupShared() {
@@ -90,16 +96,14 @@ public class MeshGenerator : MonoBehaviour {
     /// Executed by Unity upon object initialization. <see cref="https://docs.unity3d.com/Manual/ExecutionOrder.html"/>
     /// </summary>
     private void Start() {
-        STEP_SIZE = (FACTOR + STEPS - 1) / STEPS;
-        MAX_ELEMENTS = 5 * FACTOR * FACTOR * STEP_SIZE;
+        MAX_ELEMENTS = 5 * FACTOR * FACTOR * (FACTOR / STEPS);
         
         _generator = Resources.Load<ComputeShader>("GenerateVertices");
         
         setupMarch();
         setupShared();
 
-        material.SetBuffer("triangles", _outTriangles);
-        material.SetBuffer("trianglesCount", _outTrianglesCount);
+        material.SetBuffer("points", _outPoints);
 
         // generate surface
         int generateTexture = _generator.FindKernel("generateTexture");
@@ -123,27 +127,26 @@ public class MeshGenerator : MonoBehaviour {
     private void OnRenderObject() {
         material.SetMatrix("vertexTransform", gameObject.transform.localToWorldMatrix);
         
+        material.SetFloat("TIME", Time.time / 10.0f);
+        _generator.SetFloat("TIME", Time.time / 10.0f);
+        
         for (int step = 0; step < STEPS; step++) {
-            _outTrianglesCount.SetData(new int[] { 0, 1, 0, 0 });
+            _outPointsCount.SetData(new int[] { 0, 1, 0, 0 });
             
-            _generator.SetInts(
-                "LAYER_BOUNDS", 
-                new int[] { 
-                    (int) STEP_SIZE * step, 
-                    (int) Math.Min(FACTOR, STEP_SIZE * (step + 1)) 
-            });
+            _generator.SetInt("LAYER_OFFSET", (int) (FACTOR / STEPS) * step);
             
             _generator.DispatchIndirect(_marchCubes, _indirectSizeMarch);
 
-            // Here unity automatically assumes that vertices are points and hence will be represented as (x, y, z, 1) in homogenous coordinates
-            int[] nTrianglesData = new int[1];
-            _outTrianglesCount.GetData(nTrianglesData, 0, 0, 1);
-            int nTriangles = nTrianglesData[0];
-
-            // Debug.Log("Total triangles: " + nTriangles);
-            
             material.SetPass(0);
-            Graphics.DrawProceduralNow(MeshTopology.Triangles, 3 * nTriangles, 1);
+            if (isIndirectAvailable) {
+                Graphics.DrawProceduralIndirectNow(MeshTopology.Triangles, _outPointsCount, 0);
+            } else {
+                int[] nPointsData = new int[1];
+                _outPointsCount.GetData(nPointsData, 0, 0, 1);
+                int nPoints = nPointsData[0];
+                
+                Graphics.DrawProceduralNow(MeshTopology.Triangles, nPoints, 1);    
+            }
         }
     }
 
@@ -151,8 +154,8 @@ public class MeshGenerator : MonoBehaviour {
         _cubeVertices.Release();
         _caseToEdges.Release();
         _caseToTrianglesCount.Release();
-        _outTriangles.Release();
-        _outTrianglesCount.Release();
+        _outPoints.Release();
+        _outPointsCount.Release();
         _indirectSizeMarch.Release();
     }
 }

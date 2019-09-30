@@ -2,11 +2,10 @@
 #pragma kernel generateTexture TEXTURE_GENERATION
 #pragma kernel marchCubes
 
-#include "UnityShaderVariables.cginc"  // for time
+const static uint3 LAYER_GROUP_SIZE = uint3(4, 4, 32);
 
-const static uint3 LAYER_GROUP_SIZE = uint3(16, 16, 1);
-
-const uniform uint2 LAYER_BOUNDS;
+const uniform float TIME;
+const uniform int LAYER_OFFSET;
 const uniform uint3 SPLIT_FACTOR;
 const static float3 INV_SPLIT_FACTOR = 1.0 / SPLIT_FACTOR;
 
@@ -16,24 +15,32 @@ const uniform uint OCTAVE_COUNT;
 #ifdef TEXTURE_GENERATION
 
 
-#define SIMPLEX_2D
+#define SIMPLEX_4D
 #include "Noise.cginc"                 // All noise belongs here
-#undef SIMPLEX_2D
+#undef SIMPLEX_4D
 
 RWTexture2D<float> outSurfaceTexture;
 
 float fWithOctaves(float3 p) {
     float result = 0.0;
+    const static float PI = 3.14159265359;
 
-    float q = 2.0;
+    float q = 0.5;
     for (uint o = 0; o < OCTAVE_COUNT; ++o) {
-        result += snoise(p.xy * q) / q;
+        float4 pnt = float4(
+            cos(p.x * 2 * PI),
+            cos(p.y * 2 * PI),
+            sin(p.x * 2 * PI),
+            sin(p.y * 2 * PI)
+        ) * q;
+
         q *= 2.0;
+        result += snoise(pnt) / q;
     }
     return result;
 }
 
-[numthreads(32, 32, 1)]
+[numthreads(16, 16, 1)]
 void generateTexture (
     uint3 threadID : SV_DispatchThreadID
 ) {
@@ -47,13 +54,15 @@ StructuredBuffer<int3> cubeVertices;
 
 // Surface
 Texture2D<float> surfaceTexture;
-SamplerState sampler_linear_mirror;
+SamplerState samplerLinearRepeat;
 
 float f(float3 p) {   // implicit surface definition
+    p *= INV_SPLIT_FACTOR;
+    
     return all(abs(p - 0.5) < 0.5) 
         ? surfaceTexture.SampleLevel(
-             sampler_linear_mirror, 
-             p.xy + _SinTime.xy, 0
+             samplerLinearRepeat, 
+             p.xy + float2(sin(TIME), cos(TIME)), 0
         ) + 0.2 - p.z * 3.0 
         : 0.0;
 }
@@ -66,27 +75,15 @@ struct VertexData {
     float3 pos, normal;
 };
 
-struct Triangle {
-    VertexData v[3];
-};
-
-groupshared float cache[5][LAYER_GROUP_SIZE.x][LAYER_GROUP_SIZE.y];
-
-// Output triangles
-RWStructuredBuffer<int> outTrianglesCount;
-RWStructuredBuffer<Triangle> outTriangles;
-
-#define cachedF_(x, y, z) cache[(z + 5) % 5u][x][y]
-
-float cachedF(int3 a) {
-    return cachedF_(a.x, a.y, a.z);
-}
+// Output points
+RWStructuredBuffer<int> outPointsCount;
+RWStructuredBuffer<VertexData> outPoints;
 
 float3 getNormal(int3 a) {
     return normalize(float3(
-        cachedF(a + int3(1, 0, 0)) - cachedF(a - int3(1, 0, 0)),
-        cachedF(a + int3(0, 1, 0)) - cachedF(a - int3(0, 1, 0)),
-        cachedF(a + int3(0, 0, 1)) - cachedF(a - int3(0, 0, 1))
+        f(a + int3(1, 0, 0)) - f(a - int3(1, 0, 0)),
+        f(a + int3(0, 1, 0)) - f(a - int3(0, 1, 0)),
+        f(a + int3(0, 0, 1)) - f(a - int3(0, 0, 1))
     ));
 }
 
@@ -97,69 +94,37 @@ const static uint2 vertexFromEdge[12] = {
 };
 
 [numthreads(LAYER_GROUP_SIZE.x, LAYER_GROUP_SIZE.y, LAYER_GROUP_SIZE.z)]
-void marchCubes (
-    uint3 groupID : SV_GroupID, 
-    uint3 groupThreadID : SV_GroupThreadID
-) {
-    int3 cacheId0 = int3(groupThreadID.xy, LAYER_BOUNDS.x);
-    int3 id = groupID * (LAYER_GROUP_SIZE - int3(3, 3, 0)) 
-            + cacheId0 - int3(1, 1, 0);
+void marchCubes (uint3 threadID : SV_DispatchThreadID) {
+    int3 id = threadID + int3(0, 0, LAYER_OFFSET);
 
-    bool isMarching = all(
-        0 < cacheId0.xy 
-        && cacheId0.xy < (int2) LAYER_GROUP_SIZE.xy - 2 
-        && id < (int3) SPLIT_FACTOR
-    );
+    uint cubeCase = 0;
+    for (uint v = 0; v < 8; v++) {
+        if (f(id + cubeVertices[v]) > 0) {
+            cubeCase |= 1 << v;
+        }
+    }
 
-    cachedF_(cacheId0.x, cacheId0.y, cacheId0.z + 4) = 
-        f((id - int3(0, 0, 1)) * INV_SPLIT_FACTOR);
-    cachedF_(cacheId0.x, cacheId0.y, cacheId0.z + 0) = 
-        f(id * INV_SPLIT_FACTOR);
-    cachedF_(cacheId0.x, cacheId0.y, cacheId0.z + 1) = 
-        f((id + int3(0, 0, 1)) * INV_SPLIT_FACTOR);
-    cachedF_(cacheId0.x, cacheId0.y, cacheId0.z + 2) = 
-        f((id + int3(0, 0, 2)) * INV_SPLIT_FACTOR);
-    
-    for (uint layer = LAYER_BOUNDS.x; layer < LAYER_BOUNDS.y; ++layer) {
-        GroupMemoryBarrierWithGroupSync();
+    uint caseTriangles = caseToTrianglesCount[cubeCase];
+    int index;
+    InterlockedAdd(outPointsCount[0], 3 * caseTriangles, index);
+    for (uint t = 0; t < caseTriangles; t++) {
+        int3 triangleEdges = caseToEdges[cubeCase * 5 + t];
 
-        cachedF_(cacheId0.x, cacheId0.y, layer + 3) = 
-            f((id + int3(0, 0, layer - LAYER_BOUNDS.x + 3)) * INV_SPLIT_FACTOR);
+        for (uint e = 0; e < 3; e++) {
+            uint2 ij = vertexFromEdge[triangleEdges[e]];
 
-        int3 cacheId = int3(cacheId0.xy, layer);
+            int3 a = id + cubeVertices[ij.x];
+            int3 b = id + cubeVertices[ij.y];
+            
+            float alpha = abs(f(a)) / (abs(f(a)) + abs(f(b)));
+            
+            VertexData res;
 
-        if (isMarching) {
-            uint cubeCase = 0;
-            for (uint v = 0; v < 8; v++) {
-                if (cachedF(cacheId + cubeVertices[v]) > 0) {
-                    cubeCase |= 1 << v;
-                }
-            }
-
-            uint caseTriangles = caseToTrianglesCount[cubeCase];
-            int index;
-            InterlockedAdd(outTrianglesCount[0], caseTriangles, index);
-            for (uint t = 0; t < caseTriangles; t++) {
-                int3 triangleEdges = caseToEdges[cubeCase * 5 + t];
-
-                Triangle res;
-
-                for (uint e = 0; e < 3; e++) {
-                    uint2 ij = vertexFromEdge[triangleEdges[e]];
-
-                    int3 a = cacheId + cubeVertices[ij.x];
-                    int3 b = cacheId + cubeVertices[ij.y];
-                    
-                    float alpha = abs(cachedF(a)) / (abs(cachedF(a)) + abs(cachedF(b)));
-
-                    res.v[e].pos = (
-                        id + int3(0, 0, layer - LAYER_BOUNDS.x) + lerp(cubeVertices[ij.x], cubeVertices[ij.y], alpha)
-                    ) * INV_SPLIT_FACTOR;
-                    res.v[e].normal = normalize(lerp(getNormal(a), getNormal(b), alpha));
-                }
-
-                outTriangles[index + t] = res;
-            }
+            res.pos = (id + lerp(cubeVertices[ij.x], cubeVertices[ij.y], alpha)) 
+                    * INV_SPLIT_FACTOR;
+            res.normal = normalize(lerp(getNormal(a), getNormal(b), alpha));
+            
+            outPoints[index + 3 * t + e] = res;
         }
     }
 }
