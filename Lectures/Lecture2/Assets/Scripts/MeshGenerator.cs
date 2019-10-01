@@ -6,9 +6,9 @@ using Unity.Mathematics;
 using UnityEngine;
 
 public class MeshGenerator : MonoBehaviour {
-    public uint FACTOR;
-    public uint STEPS;
-    public uint OCTAVE_COUNT;
+    public int FACTOR;
+    public int STEPS;
+    public int OCTAVE_COUNT;
     public Material material;
 
     private bool isIndirectAvailable = 
@@ -17,8 +17,8 @@ public class MeshGenerator : MonoBehaviour {
             BindingFlags.Static
         ) != null;
 
-    private uint MAX_ELEMENTS;
-    private uint STEP_SIZE;
+    private int MAX_ELEMENTS;
+    private int STEP_SIZE;
     
     private ComputeShader _generator;
     private int _marchCubes;
@@ -66,7 +66,7 @@ public class MeshGenerator : MonoBehaviour {
 
         _generator.SetBuffer(_marchCubes, "cubeVertices", _cubeVertices);
 
-        _outPoints = new ComputeBuffer(3 * (int) MAX_ELEMENTS, 2 * 3 * 4);
+        _outPoints = new ComputeBuffer(3 * MAX_ELEMENTS, 2 * 3 * 4);
         _generator.SetBuffer(_marchCubes, "outPoints", _outPoints);
 
         uint[] groupSize = new uint[3];
@@ -74,9 +74,9 @@ public class MeshGenerator : MonoBehaviour {
         
         _indirectSizeMarch = new ComputeBuffer(3, 4, ComputeBufferType.IndirectArguments);
         _indirectSizeMarch.SetData(new uint[] {
-            (FACTOR + groupSize[0] - 1) / groupSize[0],
-            (FACTOR + groupSize[1] - 1) / groupSize[1],
-            ((FACTOR + groupSize[2] - 1) / groupSize[2] + STEPS - 1) / STEPS
+            (uint) (FACTOR + groupSize[0] - 1) / groupSize[0],
+            (uint) (FACTOR + groupSize[1] - 1) / groupSize[1],
+            (uint) (((uint) FACTOR + groupSize[2] - 1) / groupSize[2] + (uint) STEPS - 1) / (uint) STEPS
         });
         
         _outPointsCount = new ComputeBuffer(4, 4);
@@ -86,10 +86,10 @@ public class MeshGenerator : MonoBehaviour {
     private void setupShared() {
         _generator.SetInts(
             "SPLIT_FACTOR", 
-            new int[]{ (int) FACTOR, (int) FACTOR, (int) FACTOR }
+            new int[]{ FACTOR, FACTOR, FACTOR }
         );
         
-        _generator.SetInt("OCTAVE_COUNT", (int) OCTAVE_COUNT);
+        _generator.SetInt("OCTAVE_COUNT", OCTAVE_COUNT);
     }
     
     /// <summary>
@@ -108,15 +108,20 @@ public class MeshGenerator : MonoBehaviour {
         // generate surface
         int generateTexture = _generator.FindKernel("generateTexture");
 
-        RenderTexture surfaceTexture = new RenderTexture(
-            (int) FACTOR, (int) FACTOR, 1, 
-            RenderTextureFormat.RFloat,
-            RenderTextureReadWrite.Linear
+        int MAX_DIMENSION = Math.Max(FACTOR / 2, 1);
+
+        RenderTextureDescriptor desc = new RenderTextureDescriptor(
+            MAX_DIMENSION, MAX_DIMENSION, RenderTextureFormat.ARGBFloat
         );
-        surfaceTexture.enableRandomWrite = true;
+        desc.enableRandomWrite = true;
+        desc.dimension = UnityEngine.Rendering.TextureDimension.Tex3D;
+        desc.volumeDepth = MAX_DIMENSION;
+
+        RenderTexture surfaceTexture = new RenderTexture(desc);
         surfaceTexture.Create();
+
         _generator.SetTexture(generateTexture, "outSurfaceTexture", surfaceTexture);
-        _generator.Dispatch(generateTexture, (int) FACTOR, (int) FACTOR, 1);
+        _generator.Dispatch(generateTexture, desc.width, desc.height, desc.volumeDepth);
         
         _generator.SetTexture(_marchCubes, "surfaceTexture", surfaceTexture);
     }
@@ -133,7 +138,7 @@ public class MeshGenerator : MonoBehaviour {
         for (int step = 0; step < STEPS; step++) {
             _outPointsCount.SetData(new int[] { 0, 1, 0, 0 });
             
-            _generator.SetInt("LAYER_OFFSET", (int) (FACTOR / STEPS) * step);
+            _generator.SetInt("LAYER_OFFSET", (FACTOR / STEPS) * step);
             
             _generator.DispatchIndirect(_marchCubes, _indirectSizeMarch);
 

@@ -2,7 +2,7 @@
 #pragma kernel generateTexture TEXTURE_GENERATION
 #pragma kernel marchCubes
 
-const static uint3 LAYER_GROUP_SIZE = uint3(4, 4, 32);
+const static uint3 LAYER_GROUP_SIZE = uint3(8, 8, 8);
 
 const uniform float TIME;
 const uniform int LAYER_OFFSET;
@@ -19,36 +19,49 @@ const uniform uint OCTAVE_COUNT;
 #include "Noise.cginc"                 // All noise belongs here
 #undef SIMPLEX_4D
 
-RWTexture2D<float> outSurfaceTexture;
+RWTexture3D<half4> outSurfaceTexture;
 
+const static float PI = 3.14159265359;
+    
 float fWithOctaves(float3 p) {
+    p *= INV_SPLIT_FACTOR;
+    const float pz = p.z;
+    p *= 2 * PI;
+
     float result = 0.0;
-    const static float PI = 3.14159265359;
-
-    float q = 0.5;
+    float q = 0.25;
     for (uint o = 0; o < OCTAVE_COUNT; ++o) {
-        float4 pnt = float4(
-            cos(p.x * 2 * PI),
-            cos(p.y * 2 * PI),
-            sin(p.x * 2 * PI),
-            sin(p.y * 2 * PI)
-        ) * q;
+        float4 pnt = float4(cos(p.x), cos(p.y), sin(p.x), sin(p.y));
 
-        q *= 3.0;
-        result += snoise(pnt) / q;
+        result += snoise(
+            float4(snoise(pnt), cos(p.z) / 5.0, sin(p.z) / 5.0, 0.0)
+        ) / q;
+        p *= 2.0;
+        q *= 2.0;
     }
-    return result;
+    return result - sin(pz * 2);
 }
 
-[numthreads(16, 16, 1)]
+float3 getNormal(float3 a) {
+    return normalize(float3(
+        fWithOctaves(a + int3(1, 0, 0)) - fWithOctaves(a - int3(1, 0, 0)),
+        fWithOctaves(a + int3(0, 1, 0)) - fWithOctaves(a - int3(0, 1, 0)),
+        fWithOctaves(a + int3(0, 0, 1)) - fWithOctaves(a - int3(0, 0, 1))
+    ));
+}
+
+[numthreads(LAYER_GROUP_SIZE.x, LAYER_GROUP_SIZE.y, LAYER_GROUP_SIZE.z)]
 void generateTexture (
     uint3 threadID : SV_DispatchThreadID
 ) {
-    if (!all(threadID.xy < SPLIT_FACTOR.xy)) {
+    if (!all(threadID < SPLIT_FACTOR)) {
         return;
     }
-
-    outSurfaceTexture[threadID.xy + 0.5] = fWithOctaves(threadID * INV_SPLIT_FACTOR);
+    
+    outSurfaceTexture[threadID] = half4(
+        getNormal(threadID),
+        fWithOctaves(threadID)
+    );
 }
 
 #else
@@ -57,18 +70,21 @@ void generateTexture (
 StructuredBuffer<int3> cubeVertices;
 
 // Surface
-Texture2D<float> surfaceTexture;
+Texture3D<half4> surfaceTexture;
 SamplerState samplerLinearRepeat;
 
-float f(float3 p) {   // implicit surface definition
-    p *= INV_SPLIT_FACTOR;
+half4 fNormal(int3 p) {   // implicit surface definition
     
-    return all(abs(p - 0.5) < 0.5) 
-        ? surfaceTexture.SampleLevel(
+    if (all(0 < p && p < (int3) SPLIT_FACTOR - 1)) {
+        return surfaceTexture.SampleLevel(
              samplerLinearRepeat, 
-             p.xy + float2(sin(TIME), cos(TIME)), 0
-        ) + 0.2 - p.z * 3.0 
-        : 0.0;
+             (p + 0.5) * INV_SPLIT_FACTOR + float3(sin(TIME), cos(TIME), 0.0), 0
+        );
+    } else {
+        return float4(normalize(
+            int3(p == 0) - int3(p == (int3) SPLIT_FACTOR - 1) // correct normals at box ends
+        ), 0.0);
+    }
 }
 
 // Marching
@@ -82,14 +98,6 @@ struct VertexData {
 // Output points
 RWStructuredBuffer<int> outPointsCount;
 RWStructuredBuffer<VertexData> outPoints;
-
-float3 getNormal(int3 a) {
-    return normalize(float3(
-        f(a + int3(1, 0, 0)) - f(a - int3(1, 0, 0)),
-        f(a + int3(0, 1, 0)) - f(a - int3(0, 1, 0)),
-        f(a + int3(0, 0, 1)) - f(a - int3(0, 0, 1))
-    ));
-}
 
 const static uint2 vertexFromEdge[12] = {
     int2(0, 1), int2(1, 2), int2(2, 3), int2(3, 0), 
@@ -107,7 +115,7 @@ void marchCubes (uint3 threadID : SV_DispatchThreadID) {
 
     uint cubeCase = 0;
     for (uint v = 0; v < 8; v++) {
-        if (f(id + cubeVertices[v]) > 0) {
+        if (fNormal(id + cubeVertices[v]).w > 0) {
             cubeCase |= 1 << v;
         }
     }
@@ -123,14 +131,17 @@ void marchCubes (uint3 threadID : SV_DispatchThreadID) {
 
             int3 a = id + cubeVertices[ij.x];
             int3 b = id + cubeVertices[ij.y];
+
+            half4 fNormalA = fNormal(a);
+            half4 fNormalB = fNormal(b);
             
-            float alpha = abs(f(a)) / (abs(f(a)) + abs(f(b)));
+            float alpha = abs(fNormalA.w) / (abs(fNormalA.w) + abs(fNormalB.w));
             
             VertexData res;
 
             res.pos = (id + lerp(cubeVertices[ij.x], cubeVertices[ij.y], alpha)) 
                     * INV_SPLIT_FACTOR;
-            res.normal = normalize(lerp(getNormal(a), getNormal(b), alpha));
+            res.normal = lerp(fNormalA, fNormalB, alpha).xyz;
             
             outPoints[index + 3 * t + e] = res;
         }
