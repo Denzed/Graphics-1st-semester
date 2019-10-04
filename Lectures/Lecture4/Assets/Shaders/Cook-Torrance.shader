@@ -1,10 +1,13 @@
-﻿Shader "0_Custom/Specular"
+﻿Shader "0_Custom/Cook-Torrance"
 {
     Properties
     {
-        _BaseColor ("Color", Color) = (0, 0, 0, 1)
-        _AmbientColor ("Ambient Color", Color) = (0, 0, 0, 1)
-        _Shininess ("Shininess", Float) = 1
+        _SurroundColor ("Surround", Cube) = "white" {}
+        _Rays ("Ray count", Int) = 10
+        alpha_phong ("α Phong", Float) = 48
+        nu_i ("η Atmospheric", Float) = 1.0
+        nu_t ("η Surface", Float) = 1.5
+        reflection_threshold ("Reflection threshold", Float) = 0.07
     }
     SubShader
     {
@@ -34,8 +37,10 @@
             };
 
             float4 _AmbientColor;
+            samplerCUBE _SurroundColor;
             float4 _BaseColor;
             float _Shininess;
+            int _Rays;
 
             v2f vert (appdata v)
             {
@@ -46,17 +51,25 @@
                 return o;
             }
 
+            float nu_i;
+            float nu_t = 1.5;
+            float alpha_phong;
+            float reflection_threshold;
+            const static float PI = 3.14159265359;
+            
+            #define PHONG
+            #include "Lighting.cginc"
+            #undef PHONG
+
             fixed4 frag (v2f i) : SV_Target
             {
                 float3 normal = normalize(i.normal);
-                half cosTheta = max(0, dot(normal, _WorldSpaceLightPos0.xyz));
-                half3 diffuse = cosTheta * _LightColor0;
-                
                 float3 viewDirection = normalize(_WorldSpaceCameraPos - i.pos.xyz);
-                float cosAlpha = max(0.0, dot(reflect(-_WorldSpaceLightPos0.xyz, normal), viewDirection));
-                half3 specular = pow(cosAlpha, _Shininess) * _LightColor0;
                 
-                return half4(_BaseColor.rgb * (diffuse + _AmbientColor.rgb + specular), 1);
+                return float4(
+                    f_s(_SurroundColor, viewDirection, normal, _Rays),
+                    1.0
+                );
             }
             ENDCG
         }
