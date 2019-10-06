@@ -7,6 +7,8 @@ float F(float cosTheta, float3 F0) {
 
 #ifdef GGX
 
+#define pow2(x) ((x) * (x))
+
 float theta_m(float x) {
     return atan(roughness * sqrt(x / (1 - x)));
 }
@@ -17,8 +19,8 @@ float psi_m(float y) {
 
 float G_1(float3 v, float3 m, float3 n) {
     float v_m = saturate(dot(v, m));
-    if (v_m / saturate(dot(v, n)) > 0) {
-        return 2 / (1.0 + sqrt(1.0 + pow(roughness, 2.0) * (1 - pow(v_m, 2)) / pow(v_m, 2)));
+    if (v_m * saturate(dot(v, n)) > 0) {
+        return 2 / (1.0 + sqrt(1.0 + pow2(roughness) * (1 - pow2(v_m)) / pow2(v_m)));
     }
     return 0.0;
 }
@@ -41,7 +43,7 @@ void CookTorrance(
     }
     
     const float3 F0 = lerp(
-        pow(abs((1.0 - nu) / (1.0 + nu)), 2), 
+        pow2(abs((1.0 - nu) / (1.0 + nu))), 
         ownColor.rgb, 
         metallic
     );
@@ -54,7 +56,7 @@ void CookTorrance(
         ) * roughness), reflect(-i, n));
         
         float cosTheta = saturate(dot(o, n));
-        float sinTheta = sqrt(1.0 - pow(cosTheta, 2.0));
+        float sinTheta = sqrt(1.0 - pow2(cosTheta));
         float3 h_r = normalize(i + o);
 
         float3 fresnel = F(saturate(dot(h_r, o)), F0);

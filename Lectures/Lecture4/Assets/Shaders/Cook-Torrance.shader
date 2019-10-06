@@ -9,7 +9,6 @@
         metallic ("Metallicity", Float) = 0.5
         ownColor ("Material color", Color) = (1, 1, 1, 1)
         lightColor ("Light color", Color) = (1, 1, 1, 1)
-        gamma ("Gamma correction", Float) = 2.2
     }
     SubShader
     {
@@ -54,8 +53,7 @@
             float metallic;
             float4 ownColor;
             float4 lightColor;
-            float gamma;
-
+            
             const static float PI = 3.14159265359;
             
             #define GGX
@@ -75,7 +73,7 @@
 
                 float3 result = kD * diffuse + specular;
 
-                return float4(fix_gamma(result), 1.0);
+                return float4(result, 1.0);
             }
             ENDCG
         }
