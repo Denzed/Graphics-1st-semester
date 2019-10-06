@@ -51,7 +51,7 @@ void CookTorrance(
             theta_m(rand(57.0 * index)),
             psi_m(rand(179.0 * index)),
             0.0
-        ) * roughness), n);
+        ) * roughness), reflect(-i, n));
         
         float cosTheta = saturate(dot(o, n));
         float sinTheta = sqrt(1.0 - pow(cosTheta, 2.0));

@@ -8,6 +8,7 @@
         nu ("IOR", Float) = 1.1
         metallic ("Metallicity", Float) = 0.5
         ownColor ("Material color", Color) = (1, 1, 1, 1)
+        lightColor ("Light color", Color) = (1, 1, 1, 1)
         gamma ("Gamma correction", Float) = 2.2
     }
     SubShader
@@ -52,6 +53,7 @@
             float roughness;
             float metallic;
             float4 ownColor;
+            float4 lightColor;
             float gamma;
 
             const static float PI = 3.14159265359;
@@ -68,7 +70,7 @@
                 float3 kS;
                 CookTorrance(surround, viewDirection, normal, samples, specular, kS);
 
-                float3 diffuse = ownColor.rgb * texCUBE(surround, normal).rgb;
+                float3 diffuse = ownColor.rgb * lightColor.rgb;
                 float3 kD = (1 - kS) * (1 - metallic);
 
                 float3 result = kD * diffuse + specular;
