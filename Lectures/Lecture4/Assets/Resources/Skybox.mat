@@ -7,8 +7,8 @@ Material:
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_Name: Cook-Torrance
-  m_Shader: {fileID: 4800000, guid: 9a28092cb094cc93188fdee1800822f2, type: 3}
+  m_Name: Skybox
+  m_Shader: {fileID: 103, guid: 0000000000000000f000000000000000, type: 0}
   m_ShaderKeywords: 
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 0
@@ -19,10 +19,6 @@ Material:
   m_SavedProperties:
     serializedVersion: 3
     m_TexEnvs:
-    - _BaseColor:
-        m_Texture: {fileID: 8900000, guid: 3ebdaae2a1f12598194e1c6b377bb239, type: 3}
-        m_Scale: {x: 1, y: 1}
-        m_Offset: {x: 0, y: 0}
     - _BumpMap:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
@@ -59,11 +55,7 @@ Material:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
-    - _SurroundColor:
-        m_Texture: {fileID: 8900000, guid: 3ebdaae2a1f12598194e1c6b377bb239, type: 3}
-        m_Scale: {x: 1, y: 1}
-        m_Offset: {x: 0, y: 0}
-    - surround:
+    - _Tex:
         m_Texture: {fileID: 8900000, guid: 3ebdaae2a1f12598194e1c6b377bb239, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
@@ -72,6 +64,7 @@ Material:
     - _Cutoff: 0.5
     - _DetailNormalMapScale: 1
     - _DstBlend: 0
+    - _Exposure: 1
     - _GlossMapScale: 1
     - _Glossiness: 0.5
     - _GlossyReflections: 1
@@ -79,27 +72,13 @@ Material:
     - _Mode: 0
     - _OcclusionStrength: 1
     - _Parallax: 0.02
-    - _Rays: 0
-    - _Shininess: 0
+    - _Rotation: 0
     - _SmoothnessTextureChannel: 0
     - _SpecularHighlights: 1
     - _SrcBlend: 1
     - _UVSec: 0
     - _ZWrite: 1
-    - _kek: 0
-    - alpha_phong: 48
-    - gamma: 2.2
-    - metallic: 1
-    - nu: 1.5
-    - nu_i: 1
-    - nu_t: 1.1
-    - reflection_threshold: 0.01
-    - roughness: 1
-    - samples: 100
     m_Colors:
-    - _AmbientColor: {r: 0, g: 0, b: 0, a: 1}
-    - _BaseColor: {r: 0.19744569, g: 0.38476574, b: 0.8207547, a: 1}
     - _Color: {r: 1, g: 1, b: 1, a: 1}
     - _EmissionColor: {r: 0, g: 0, b: 0, a: 1}
-    - ambientColor: {r: 1, g: 1, b: 1, a: 1}
-    - ownColor: {r: 0.9622642, g: 0.5841297, b: 0.027233899, a: 1}
+    - _Tint: {r: 0.5, g: 0.5, b: 0.5, a: 0.5}

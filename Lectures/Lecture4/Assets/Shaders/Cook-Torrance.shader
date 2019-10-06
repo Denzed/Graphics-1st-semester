@@ -2,12 +2,13 @@
 {
     Properties
     {
-        _SurroundColor ("Surround", Cube) = "white" {}
-        _Rays ("Ray count", Int) = 10
-        alpha_phong ("α Phong", Float) = 48
-        nu_i ("η Atmospheric", Float) = 1.0
-        nu_t ("η Surface", Float) = 1.5
-        reflection_threshold ("Reflection threshold", Float) = 0.07
+        surround ("Surround", Cube) = "white" {}
+        samples ("Samples", Int) = 10
+        roughness ("Roughness", Float) = 0.1
+        nu ("IOR", Float) = 1.1
+        metallic ("Metallicity", Float) = 0.5
+        ownColor ("Material color", Color) = (1, 1, 1, 1)
+        gamma ("Gamma correction", Float) = 2.2
     }
     SubShader
     {
@@ -36,12 +37,6 @@
                 fixed3 normal : NORMAL;
             };
 
-            float4 _AmbientColor;
-            samplerCUBE _SurroundColor;
-            float4 _BaseColor;
-            float _Shininess;
-            int _Rays;
-
             v2f vert (appdata v)
             {
                 v2f o;
@@ -51,25 +46,34 @@
                 return o;
             }
 
-            float nu_i;
-            float nu_t = 1.5;
-            float alpha_phong;
-            float reflection_threshold;
+            samplerCUBE surround;
+            int samples;
+            float nu;
+            float roughness;
+            float metallic;
+            float4 ownColor;
+            float gamma;
+
             const static float PI = 3.14159265359;
             
-            #define PHONG
+            #define GGX
             #include "Lighting.cginc"
-            #undef PHONG
 
             fixed4 frag (v2f i) : SV_Target
             {
                 float3 normal = normalize(i.normal);
                 float3 viewDirection = normalize(_WorldSpaceCameraPos - i.pos.xyz);
-                
-                return float4(
-                    f_s(_SurroundColor, viewDirection, normal, _Rays),
-                    1.0
-                );
+
+                float3 specular;
+                float3 kS;
+                CookTorrance(surround, viewDirection, normal, samples, specular, kS);
+
+                float3 diffuse = ownColor.rgb * texCUBE(surround, normal).rgb;
+                float3 kD = (1 - kS) * (1 - metallic);
+
+                float3 result = kD * diffuse + specular;
+
+                return float4(fix_gamma(result), 1.0);
             }
             ENDCG
         }

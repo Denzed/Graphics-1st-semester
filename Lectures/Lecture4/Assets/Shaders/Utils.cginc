@@ -29,3 +29,6 @@ float4x4 rotationMatrix(float3 rotation) {
     return rotateXMatrix * rotateYMatrix * rotateZMatrix;
 }
 
+float3 fix_gamma(float3 color) {
+    return pow(color, 1.0 / gamma);
+}

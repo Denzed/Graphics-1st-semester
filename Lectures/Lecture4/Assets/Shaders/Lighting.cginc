@@ -1,107 +1,70 @@
 #include "Noise.cginc"
 #include "Utils.cginc" // rotationMatrix
 
-float F(float3 i, float3 m) {
-    float c = dot(i, m);
-    float g = pow(nu_t / nu_i, 2) - 1 + pow(c, 2);
-
-    if (g < 0) {
-        return 1.0;
-    }
-    g = sqrt(g);
-
-    return 0.5 * pow((g - c) / (g + c), 2) 
-        * (1 + pow(
-            (c * (g + c) - 1) / (c * (g - c) + 1),
-            2
-        ));
+float F(float cosTheta, float3 F0) {
+    return F0 + (1 - F0) * pow(1 - cosTheta, 5);
 }
 
-#ifdef PHONG
-
-float D(float3 m, float3 n) {
-    float cosTheta = dot(m, n);
-    if (cosTheta > 0) {
-        return (alpha_phong + 2) / 2 / PI * pow(cosTheta, alpha_phong);
-    } 
-    return 0;
-}
-
-float a(float3 v, float3 n) {
-    return sqrt(0.5 * alpha_phong + 1) / tan(acos(
-        dot(v, n)
-    ));
-}
+#ifdef GGX
 
 float theta_m(float x) {
-    return acos(pow(x, 1 / (alpha_phong + 2)));
+    return atan(roughness * sqrt(x / (1 - x)));
 }
 
 float psi_m(float y) {
     return 2 * PI * y;
 }
 
-#endif
-
 float G_1(float3 v, float3 m, float3 n) {
-    if (dot(v, m) / dot(v, n) > 0) {
-        float a_ = a(v, n);
-
-        return a_ < 1.6 
-            ? (3.535 * a_ + 2.181 * pow(a_, 2)) / (1 + 2.276 * a_ + 2.577 * pow(a_, 2))
-            : 1.0;
+    float v_m = saturate(dot(v, m));
+    if (v_m / saturate(dot(v, n)) > 0) {
+        return 2 / (1.0 + sqrt(1.0 + pow(roughness, 2.0) * (1 - pow(v_m, 2)) / pow(v_m, 2)));
     }
     return 0.0;
 }
+
+#endif
 
 float G(float3 i, float3 o, float3 m, float3 n) {
     return G_1(i, m, n) * G_1(o, m, n); // roughly
 }
 
-float f_t(float3 i, float3 o, float3 m, float3 n) {
-    float3 h_t = -normalize(nu_i * i + nu_t * o);
+void CookTorrance(
+    samplerCUBE surround, float3 i, float3 n, int samples, 
+    out float3 specular, out float3 kS
+) {
+    specular = 0.0;
+    kS = 0.0;
 
-    return abs(
-        dot(i, h_t) * dot(o, h_t) 
-        / dot(i, m) / dot(o, m)
-    ) * pow(nu_t, 2) * (1 - F(i, h_t)) * G(i, o, h_t, n) * D(h_t, n)
-        / pow(nu_i * dot(i, h_t) + nu_t * dot(0, h_t), 2);
-}
+    if (samples == 0) {
+        return;
+    }
+    
+    const float3 F0 = lerp(
+        pow(abs((1.0 - nu) / (1.0 + nu)), 2), 
+        ownColor.rgb, 
+        metallic
+    );
 
-float f_r(float3 i, float3 o, float3 m, float3 n) {
-    float3 h_r = normalize(sign(dot(i, m)) * (i + o));
+    for (int index = 1; index <= samples; ++index) {
+        float3 o = mul(rotationMatrix(float3( 
+            theta_m(rand(57.0 * index)),
+            psi_m(rand(179.0 * index)),
+            0.0
+        ) * roughness), n);
+        
+        float cosTheta = saturate(dot(o, n));
+        float sinTheta = sqrt(1.0 - pow(cosTheta, 2.0));
+        float3 h_r = normalize(i + o);
 
-    return F(i, h_r) * G(i, o, h_r, n) * D(h_r, n) 
-        / abs(4 * dot(i, m) * dot(o, m));
-}
+        float3 fresnel = F(saturate(dot(h_r, o)), F0);
+        float partial_geometry = G(i, o, h_r, n);
+        float denominator = saturate(4 * saturate(dot(n, i)) * saturate(dot(h_r, n)) + 0.05);
 
-float3 f_s(samplerCUBE surround, float3 i, float3 n, int samples) {
-    float3 total = 0.0;
-    float total_weight = 0.0;
-
-    for (int facet = 1; facet <= samples; ++facet) {
-        float theta = theta_m(rand(57.0 * facet));
-        float psi = psi_m(rand(179.0 * facet));
-
-        float3 m = mul(rotationMatrix(float3(theta, psi, 0.0)), n);
-        float3 o;
-
-        float visibility;
-        if (F(i, m) >= reflection_threshold) {
-            o = 2 * abs(dot(i, m)) * m - i;
-        } else {
-            float nu = nu_i / nu_t;
-            float c = dot(i, m);
-
-            o = (nu * c - sign(dot(i, n)) * sqrt(1 + nu * (pow(c, 2) - 1))) * m - nu * i;
-        }
-
-        float weight = G(i, o, m, n) * abs(dot(i, m) 
-            / dot(i, n) / dot(m, n));
-
-        total += weight * o;
-        total_weight += weight;
+        kS += fresnel;
+        specular += texCUBE(surround, o).rgb * fresnel * partial_geometry * sinTheta / denominator;
     }
 
-    return texCUBE(surround, total / total_weight);
+    kS = saturate(kS / samples);
+    specular /= samples;
 }
