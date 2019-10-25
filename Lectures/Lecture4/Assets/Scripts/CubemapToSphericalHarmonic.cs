@@ -15,7 +15,6 @@ public class CubemapToSphericalHarmonic : MonoBehaviour
     
     public bool UseCompute;
     
-    
     public Cubemap Env;
 
     public ComputeShader Compute;
@@ -49,15 +48,13 @@ public class CubemapToSphericalHarmonic : MonoBehaviour
             bufferSetup.Bind(Compute, _kernel);
         }
         Compute.SetTexture(_kernel, "_Env", Env);
+        Compute.Dispatch(_kernel, 1024, 1, 1);
     }
     
     void Update()
     {
         if (UseCompute)
         {
-            // We don't really have to recalculate SH every frame. It's just here to show you how performant it is.
-            Compute.Dispatch(_kernel, 1024, 1, 1);
-
             foreach (var bufferSetup in _setups)
             {
                 bufferSetup.Push();
