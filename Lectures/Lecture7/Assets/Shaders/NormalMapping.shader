@@ -6,7 +6,7 @@
         _Normals ("Normals", 2D) = "white" {}
         _Heights ("Height map", 2D) = "black" {}
         _Height_scale ("Height scale", Range(0, 1)) = 0.1
-        _Limit_offset_bias ("Limit offset bias", Float) = 0
+        _Limit_offset_bias ("Limit offset bias", Range(0, 1)) = 0
     }
     SubShader
     {
@@ -44,12 +44,9 @@
                 o.vertex = UnityObjectToClipPos(vertex);
                 o.normal = mul(objToTangent, normal);
                 o.uv = uv;
-                o.pos = 0; // zero in tangent space?
-                o.view = -mul(objToTangent, ObjSpaceViewDir(vertex));
-                o.light = mul(objToTangent, ObjSpaceLightDir(vertex));
-
-                if (_Limit_offset_bias > 0) 
-                    o.view.xy /= o.view.z + _Limit_offset_bias;
+                o.pos = 0;
+                o.view = mul(objToTangent, -ObjSpaceViewDir(vertex));
+                o.light = normalize(mul(objToTangent, ObjSpaceLightDir(vertex)));
                 
                 return o;
             }
@@ -57,51 +54,61 @@
             sampler2D _Albedo, _Normals, _Heights;
 			float4 _Albedo_ST, _Normals_ST, _Heights_ST;
             float _Height_scale;
-            const static int STEPS = 10;
+            
+            const static int LINEAR_STEPS = 8;
+            const static int BINARY_STEPS = 16;
 
             float get_height(float2 uv) {
                 float2 heights_uv = TRANSFORM_TEX(uv, _Heights);
-                return 1 - tex2Dgrad(_Heights, heights_uv, ddx(heights_uv), ddy(heights_uv)).r;
+                return tex2Dgrad(_Heights, heights_uv, ddx(heights_uv), ddy(heights_uv)).r;
             }
   
             float2 parallax_mapping(float2 uv, float3 view_dir) {
-                const float step_size = 2.0 / STEPS;
+                const float step_size = 1.0 / (LINEAR_STEPS - 1);
                 const float2 uv_step = step_size * _Height_scale * view_dir;
 
-                float2 prev_offset = 0;
                 float2 offset = 0;
-                float prev_approx_height = 1;
-                float approx_height = 2;
-                float prev_actual_height = 0;
-                float actual_height = get_height(uv);
+                float approx_height = 1;
+                float actual_height = get_height(uv + offset);
 
-                for (int i = 0; approx_height > actual_height && i < STEPS; ++i) {
-                    prev_offset = offset;
+                for (int i = 0; approx_height > actual_height && i < LINEAR_STEPS; ++i) {
                     offset -= uv_step;
-
-                    prev_approx_height = approx_height;
                     approx_height -= step_size;
-
-                    prev_actual_height = actual_height;
                     actual_height = get_height(uv + offset);
-                }	
+                }
                 
-                float prev_delta = prev_approx_height - prev_actual_height;
-	            float delta = actual_height - approx_height;
-                return lerp(prev_offset, offset, prev_delta / (prev_delta + delta));
+                float l = 1;
+                float r = 0;
+                for (int j = 0; j < BINARY_STEPS; ++j) {
+                    float m = (l + r) / 2;
+                    float m_approx_height = approx_height + step_size * m;
+                    float m_actual_height = get_height(uv + offset + uv_step * m);
+
+                    if (m_approx_height > m_actual_height)
+                        l = m;
+                    else
+                        r = m;
+                }
+                
+                float l_delta = approx_height + l * step_size - get_height(uv + offset + uv_step * l);
+                float r_delta = approx_height + r * step_size - get_height(uv + offset + uv_step * r);
+                return offset + uv_step * lerp(l, r, abs(l_delta / (l_delta - r_delta)));
             }
         
-            fixed4 frag (v2f i) : SV_Target
+            float4 frag (v2f i) : SV_Target
             {
-                float2 offset = parallax_mapping(i.uv, -normalize(i.view - i.pos));
-                // if (mapped_uv.x > 1.0 || mapped_uv.y > 1.0 || mapped_uv.x < 0.0 || mapped_uv.y < 0.0)
-                    // discard; 
+                if (_Limit_offset_bias > 0) 
+                    i.view.xy /= abs(i.view.z) + _Limit_offset_bias;
 
-                half3 worldNormal = normalize(i.normal + UnpackNormal(tex2D(_Normals, TRANSFORM_TEX(i.uv + offset, _Normals))));
+                i.uv += parallax_mapping(i.uv, normalize(i.pos - i.view));
+                if (i.uv.x > 1.0 || i.uv.y > 1.0 || i.uv.x < 0.0 || i.uv.y < 0.0)
+                    discard; 
 
-                fixed3 baseColor = tex2D(_Albedo, TRANSFORM_TEX(i.uv + offset, _Albedo)).rgb;
+                half3 normal = UnpackNormal(tex2D(_Normals, TRANSFORM_TEX(i.uv, _Normals)));
+
+                fixed3 baseColor = tex2D(_Albedo, TRANSFORM_TEX(i.uv, _Albedo)).rgb;
                 
-                half cosTheta = max(0, dot(worldNormal, i.light));
+                float cosTheta = max(0, dot(normal, i.light));
                 half3 diffuse = cosTheta * _LightColor0;
 
                 return float4(
