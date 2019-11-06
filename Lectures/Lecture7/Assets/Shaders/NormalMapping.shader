@@ -7,6 +7,7 @@
         _Heights ("Height map", 2D) = "black" {}
         _Height_scale ("Height scale", Range(0, 1)) = 0.1
         _Limit_offset_bias ("Limit offset bias", Range(0, 1)) = 0
+        [MaterialToggle] _SelfShadowing("Lazy self shadow", Float) = 0
     }
     SubShader
     {
@@ -54,6 +55,7 @@
             sampler2D _Albedo, _Normals, _Heights;
 			float4 _Albedo_ST, _Normals_ST, _Heights_ST;
             float _Height_scale;
+            float _SelfShadowing;
             
             const static int LINEAR_STEPS = 8;
             const static int BINARY_STEPS = 16;
@@ -63,12 +65,12 @@
                 return tex2Dgrad(_Heights, heights_uv, ddx(heights_uv), ddy(heights_uv)).r;
             }
   
-            float2 parallax_mapping(float2 uv, float3 view_dir) {
-                const float step_size = 1.0 / (LINEAR_STEPS - 1);
-                const float2 uv_step = step_size * _Height_scale * view_dir;
+            float2 march_ray(float2 uv, float3 ray, float h_base, float h_finish) {
+                const float step_size = (h_base - h_finish) / (LINEAR_STEPS - 1);
+                const float2 uv_step = step_size * _Height_scale * ray;
 
                 float2 offset = 0;
-                float approx_height = 1;
+                float approx_height = h_base;
                 float actual_height = get_height(uv + offset);
 
                 for (int i = 0; approx_height > actual_height && i < LINEAR_STEPS; ++i) {
@@ -100,9 +102,13 @@
                 if (_Limit_offset_bias > 0) 
                     i.view.xy /= abs(i.view.z) + _Limit_offset_bias;
 
-                i.uv += parallax_mapping(i.uv, normalize(i.pos - i.view));
+                i.uv += march_ray(i.uv, normalize(i.pos - i.view), 1.0, 0.0);
                 if (i.uv.x > 1.0 || i.uv.y > 1.0 || i.uv.x < 0.0 || i.uv.y < 0.0)
                     discard; 
+
+                bool self_shadowing = _SelfShadowing * length(march_ray(i.uv, -i.light, get_height(i.uv), 1.0)) > 0.001;
+                if (self_shadowing)
+                    return 0;
 
                 half3 normal = UnpackNormal(tex2D(_Normals, TRANSFORM_TEX(i.uv, _Normals)));
 
