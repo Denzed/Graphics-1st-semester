@@ -110,7 +110,7 @@
 
                 fixed3 baseColor = tex2D(_Albedo, i.uv).rgb;
                 
-                half3 diffuse = _LightColor0 * max(0, dot(UnpackNormal(tex2D(_Normals, i.uv)), i.light));
+                half3 diffuse = _LightColor0 * max(0, dot(UnpackNormal(tex2D(_Normals, i.uv)) * float3(1, -1, 1), i.light));
 
                 return float4(
                     baseColor * diffuse,
