@@ -7,8 +7,8 @@
 5. The e-mail should have the following topic: __HSE.CG.<your_name>.<your_last_name>.HW8__
 
 **Bonus points:** 
-+20% for weather control texture with per-pixel density, cloud type, rain 
-+10% for animation of the clouds
-+10% for Beer's-Powder law
-+15% for efficient Skipping of the empty space.
++ 20% for weather control texture with per-pixel density, cloud type, rain 
++ 10% for animation of the clouds
++ 10% for Beer's-Powder law
++ 15% for efficient Skipping of the empty space.
 + up to 50% for any other clever tricks.
