@@ -1,0 +1,3 @@
+[submodule "Lectures/Lecture8/Assets/TextureGenerator"]
+	path = Lectures/Lecture8/Assets/TextureGenerator
+	url = https://github.com/mtwoodard/TextureGenerator
